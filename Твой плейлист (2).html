@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Плейлист</title>
+<style>
+  :root {
+    --md-primary: #D0BCFF;
+    --md-on-primary: #381E72;
+    --md-primary-container: #4F378B;
+    --md-on-primary-container: #EADDFF;
+    --md-secondary: #CCC2DC;
+    --md-surface: #141218;
+    --md-surface-container-low: #1D1B20;
+    --md-surface-container: #211F26;
+    --md-surface-container-high: #2B2930;
+    --md-surface-container-highest: #36343B;
+    --md-on-surface: #E6E0E9;
+    --md-on-surface-variant: #CAC4D0;
+    --md-outline: #938F99;
+    --md-outline-variant: #49454F;
+    --md-error: #F2B8B5;
+    --md-error-container: #8C1D18;
+
+    --shape-xl: 28px;
+    --shape-l: 20px;
+    --shape-m: 14px;
+    --shape-s: 10px;
+    --shape-full: 999px;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--md-surface);
+    color: var(--md-on-surface);
+    font-family: "Google Sans", "Segoe UI Variable", "Segoe UI", Roboto, system-ui, -apple-system, sans-serif;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    min-height: 100%;
+    background-image:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(79, 55, 139, 0.35), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 0%, rgba(76, 40, 92, 0.28), transparent 55%);
+    background-attachment: fixed;
+  }
+
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+
+  .app {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 32px 20px 64px;
+  }
+
+  header.top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+  }
+
+  h1.wordmark {
+    font-size: 28px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    margin: 0;
+    color: var(--md-on-surface);
+  }
+
+  .queue-count {
+    font-size: 14px;
+    color: var(--md-on-surface-variant);
+  }
+
+  /* --- Add bar --- */
+  .add-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 28px;
+  }
+
+  .add-bar input {
+    flex: 1;
+    background: var(--md-surface-container-high);
+    border: 1px solid var(--md-outline-variant);
+    color: var(--md-on-surface);
+    border-radius: var(--shape-full);
+    padding: 16px 22px;
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .add-bar input::placeholder { color: var(--md-outline); }
+  .add-bar input:focus {
+    border-color: var(--md-primary);
+    background: var(--md-surface-container-highest);
+  }
+
+  .btn-add {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    border: none;
+    border-radius: var(--shape-full);
+    padding: 0 26px;
+    font-size: 15px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: filter 0.15s ease, transform 0.1s ease;
+  }
+  .btn-add:hover { filter: brightness(1.08); }
+  .btn-add:active { transform: scale(0.97); }
+
+  .add-feedback {
+    font-size: 13px;
+    color: var(--md-error);
+    margin: -18px 0 20px 6px;
+    min-height: 16px;
+  }
+
+  /* --- Layout grid --- */
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  /* --- Hero player card --- */
+  .player-card {
+    background: linear-gradient(165deg, var(--md-primary-container) 0%, var(--md-surface-container-high) 78%);
+    border-radius: var(--shape-xl);
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .video-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: var(--shape-l);
+    overflow: hidden;
+    background: #000;
+  }
+  .video-wrap iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+
+  .video-wrap.empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+  }
+  .video-wrap.empty p {
+    color: var(--md-on-primary-container);
+    font-size: 15px;
+    max-width: 280px;
+    line-height: 1.5;
+    opacity: 0.85;
+  }
+
+  .now-playing {
+    margin-top: 18px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .np-text { min-width: 0; flex: 1; }
+  .np-title {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--md-on-primary-container);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .np-sub {
+    font-size: 13px;
+    color: var(--md-on-primary-container);
+    opacity: 0.7;
+    margin-top: 2px;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 18px;
+  }
+
+  .ctrl-btn {
+    background: rgba(255,255,255,0.10);
+    border: none;
+    color: var(--md-on-primary-container);
+    width: 46px;
+    height: 46px;
+    border-radius: var(--shape-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s ease, border-radius 0.2s cubic-bezier(0.2, 0, 0, 1);
+    flex-shrink: 0;
+  }
+  .ctrl-btn:hover { background: rgba(255,255,255,0.18); }
+  .ctrl-btn svg { width: 20px; height: 20px; fill: currentColor; }
+  .ctrl-btn.active {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+  }
+  .ctrl-btn.active:hover { background: var(--md-primary); filter: brightness(1.08); }
+
+  .ctrl-play {
+    width: 60px;
+    height: 60px;
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    border-radius: var(--shape-l);
+  }
+  .ctrl-play:hover { background: var(--md-primary); filter: brightness(1.08); }
+  .ctrl-play.is-playing { border-radius: var(--shape-full); }
+  .ctrl-play svg { width: 26px; height: 26px; }
+
+  .mode-toggle {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+  }
+  .chip {
+    background: rgba(255,255,255,0.08);
+    color: var(--md-on-primary-container);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: var(--shape-full);
+    padding: 8px 14px;
+    font-size: 12.5px;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .chip.active {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    border-color: transparent;
+  }
+  .chip svg { width: 14px; height: 14px; fill: currentColor; }
+
+  .hint {
+    margin-top: 14px;
+    font-size: 12.5px;
+    color: var(--md-on-primary-container);
+    opacity: 0.65;
+    line-height: 1.5;
+  }
+
+  /* --- Queue --- */
+  .queue-card {
+    background: var(--md-surface-container);
+    border-radius: var(--shape-xl);
+    padding: 16px;
+    max-height: 640px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .queue-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px 14px;
+  }
+  .queue-header h2 {
+    font-size: 15px;
+    font-weight: 500;
+    margin: 0;
+    color: var(--md-on-surface-variant);
+  }
+  .clear-btn {
+    background: none;
+    border: none;
+    color: var(--md-outline);
+    font-size: 12.5px;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: var(--shape-full);
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .clear-btn:hover { background: var(--md-surface-container-highest); color: var(--md-error); }
+
+  .queue-list {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--md-outline-variant) transparent;
+  }
+  .queue-list::-webkit-scrollbar { width: 6px; }
+  .queue-list::-webkit-scrollbar-thumb { background: var(--md-outline-variant); border-radius: 4px; }
+
+  .queue-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--md-outline);
+    font-size: 13.5px;
+    line-height: 1.6;
+  }
+
+  .q-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 10px;
+    border-radius: var(--shape-l);
+    cursor: pointer;
+    transition: background 0.15s ease;
+    position: relative;
+  }
+  .q-item:hover { background: var(--md-surface-container-high); }
+  .q-item.current {
+    background: var(--md-primary-container);
+  }
+  .q-item.current .q-title { color: var(--md-on-primary-container); }
+  .q-item.current .q-index { color: var(--md-on-primary-container); }
+
+  .q-thumb {
+    width: 76px;
+    height: 44px;
+    border-radius: var(--shape-s);
+    object-fit: cover;
+    flex-shrink: 0;
+    background: var(--md-surface-container-highest);
+  }
+
+  .q-text { flex: 1; min-width: 0; }
+  .q-title {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--md-on-surface);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .q-index {
+    font-size: 11.5px;
+    color: var(--md-outline);
+    margin-top: 2px;
+  }
+
+  .q-remove {
+    background: none;
+    border: none;
+    color: var(--md-outline);
+    width: 30px;
+    height: 30px;
+    border-radius: var(--shape-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+  }
+  .q-item:hover .q-remove { opacity: 1; }
+  .q-remove:hover { background: var(--md-surface-container-highest); color: var(--md-error); }
+  .q-remove svg { width: 15px; height: 15px; fill: currentColor; }
+
+  footer.foot {
+    text-align: center;
+    margin-top: 32px;
+    font-size: 12px;
+    color: var(--md-outline);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="top">
+    <h1 class="wordmark">твой плейлист</h1>
+    <div class="queue-count" id="queueCount">0 треков в очереди</div>
+  </header>
+
+  <div class="add-bar">
+    <input type="text" id="urlInput" placeholder="Вставь ссылку на YouTube-видео и жми Enter" />
+    <button class="btn-add" id="addBtn">
+      <svg viewBox="0 0 24 24"><path d="M19 13H13V19H11V13H5V11H11V5H13V11H19V13Z"/></svg>
+      Добавить
+    </button>
+  </div>
+  <div class="add-feedback" id="addFeedback"></div>
+
+  <div class="layout">
+    <section class="player-card">
+      <div class="video-wrap empty" id="videoWrap">
+        <p>Добавь первую ссылку — плеер запустится прямо здесь. Когда очередь закончится, я передам эстафету рекомендациям ютуба, как ты и просила.</p>
+      </div>
+
+      <div class="now-playing">
+        <div class="np-text">
+          <div class="np-title" id="npTitle">Ничего не играет</div>
+          <div class="np-sub" id="npSub">Добавь ссылку, чтобы начать</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="ctrl-btn" id="shuffleBtn" title="Перемешать">
+          <svg viewBox="0 0 24 24"><path d="M10.59 9.17L5.41 4L4 5.41L9.17 10.58L10.59 9.17M14.5 4L16.54 6.04L4 18.59L5.41 20L17.96 7.46L20 9.5V4H14.5M14.83 13.41L13.42 14.82L16.55 17.95L14.5 20H20V14.5L17.96 16.54L14.83 13.41Z"/></svg>
+        </button>
+        <button class="ctrl-btn" id="prevBtn" title="Предыдущий">
+          <svg viewBox="0 0 24 24"><path d="M6 6H8V18H6V6M9.5 12L18 6V18L9.5 12Z"/></svg>
+        </button>
+        <button class="ctrl-btn ctrl-play" id="playBtn" title="Play/Pause">
+          <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5V19L19 12L8 5Z"/></svg>
+        </button>
+        <button class="ctrl-btn" id="nextBtn" title="Следующий">
+          <svg viewBox="0 0 24 24"><path d="M16 18H18V6H16V18M6 18L14.5 12L6 6V18Z"/></svg>
+        </button>
+
+        <div class="mode-toggle">
+          <button class="chip active" id="modeQueueBtn" title="Играть только мой список">
+            <svg viewBox="0 0 24 24"><path d="M4 10H16V8H4V10M4 14H12V12H4V14M4 18H12V16H4V18M20 4H4V6H20V4M18 14V9H16V14H14L17 18L20 14H18Z"/></svg>
+            мой список
+          </button>
+          <button class="chip" id="modeAutoBtn" title="После списка — рекомендации YouTube">
+            <svg viewBox="0 0 24 24"><path d="M4.5 11L11 4.5L12.4 5.9L7.3 11H20V13H7.3L12.4 18.1L11 19.5L4.5 13Z" transform="rotate(180 12 12)"/></svg>
+            + рекомендации
+          </button>
+        </div>
+      </div>
+
+      <div class="hint" id="hintText">Режим «мой список»: плеер идёт строго по твоей очереди и останавливается в конце.</div>
+    </section>
+
+    <aside class="queue-card">
+      <div class="queue-header">
+        <h2>Очередь</h2>
+        <button class="clear-btn" id="clearBtn">Очистить всё</button>
+      </div>
+      <div class="queue-list" id="queueList">
+        <div class="queue-empty">Список пуст.<br>Вставь ссылку выше — она появится тут.</div>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="foot">Ссылки хранятся локально в этом браузере (localStorage).</footer>
+</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "yt_playlist_material_v1";
+  var STORAGE_INDEX_KEY = "yt_playlist_material_index_v1";
+  var STORAGE_MODE_KEY = "yt_playlist_material_mode_v1";
+  var STORAGE_SHUFFLE_KEY = "yt_playlist_material_shuffle_v1";
+
+  /** @type {{id:string, title:string, thumb:string, addedAt:number}[]} */
+  var playlist = [];
+  var currentIndex = -1;
+  var autoRecommend = false; // false = "мой список", true = "+ рекомендации"
+  var shuffleOn = false;
+  var shuffleOrder = []; // array of playlist indices in shuffled play order
+  var shufflePos = -1;   // position within shuffleOrder that is currently playing
+  var player = null;
+  var playerReady = false;
+  var isPlaying = false;
+  var pendingLoadIndex = null; // if user picks a video before player is ready
+
+  var els = {
+    urlInput: document.getElementById("urlInput"),
+    addBtn: document.getElementById("addBtn"),
+    addFeedback: document.getElementById("addFeedback"),
+    videoWrap: document.getElementById("videoWrap"),
+    npTitle: document.getElementById("npTitle"),
+    npSub: document.getElementById("npSub"),
+    playBtn: document.getElementById("playBtn"),
+    playIcon: document.getElementById("playIcon"),
+    prevBtn: document.getElementById("prevBtn"),
+    nextBtn: document.getElementById("nextBtn"),
+    shuffleBtn: document.getElementById("shuffleBtn"),
+    modeQueueBtn: document.getElementById("modeQueueBtn"),
+    modeAutoBtn: document.getElementById("modeAutoBtn"),
+    hintText: document.getElementById("hintText"),
+    queueList: document.getElementById("queueList"),
+    queueCount: document.getElementById("queueCount"),
+    clearBtn: document.getElementById("clearBtn")
+  };
+
+  var ICON_PLAY = '<path d="M8 5V19L19 12L8 5Z"/>';
+  var ICON_PAUSE = '<path d="M6 19H10V5H6V19M14 5V19H18V5H14Z"/>';
+
+  // ---------- Storage ----------
+  function loadState() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      playlist = raw ? JSON.parse(raw) : [];
+    } catch (e) { playlist = []; }
+
+    try {
+      var idx = localStorage.getItem(STORAGE_INDEX_KEY);
+      currentIndex = idx !== null ? parseInt(idx, 10) : -1;
+      if (isNaN(currentIndex) || currentIndex < -1 || currentIndex >= playlist.length) currentIndex = -1;
+    } catch (e) { currentIndex = -1; }
+
+    try {
+      autoRecommend = localStorage.getItem(STORAGE_MODE_KEY) === "1";
+    } catch (e) { autoRecommend = false; }
+
+    try {
+      shuffleOn = localStorage.getItem(STORAGE_SHUFFLE_KEY) === "1";
+    } catch (e) { shuffleOn = false; }
+  }
+
+  function savePlaylist() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(playlist));
+  }
+  function saveIndex() {
+    localStorage.setItem(STORAGE_INDEX_KEY, String(currentIndex));
+  }
+  function saveMode() {
+    localStorage.setItem(STORAGE_MODE_KEY, autoRecommend ? "1" : "0");
+  }
+  function saveShuffle() {
+    localStorage.setItem(STORAGE_SHUFFLE_KEY, shuffleOn ? "1" : "0");
+  }
+
+  // ---------- Shuffle ----------
+  function buildShuffleOrder(keepCurrentFirst) {
+    var indices = [];
+    for (var i = 0; i < playlist.length; i++) indices.push(i);
+
+    // Fisher-Yates
+    for (var j = indices.length - 1; j > 0; j--) {
+      var k = Math.floor(Math.random() * (j + 1));
+      var tmp = indices[j]; indices[j] = indices[k]; indices[k] = tmp;
+    }
+
+    if (keepCurrentFirst && currentIndex >= 0) {
+      var pos = indices.indexOf(currentIndex);
+      if (pos > 0) {
+        indices.splice(pos, 1);
+        indices.unshift(currentIndex);
+      }
+    }
+
+    shuffleOrder = indices;
+    shufflePos = keepCurrentFirst && currentIndex >= 0 ? 0 : -1;
+  }
+
+  function setShuffle(on) {
+    shuffleOn = on;
+    saveShuffle();
+    els.shuffleBtn.classList.toggle("active", on);
+    if (on) {
+      buildShuffleOrder(true);
+    } else {
+      shuffleOrder = [];
+      shufflePos = -1;
+    }
+  }
+
+  // ---------- YouTube URL parsing ----------
+  function extractVideoId(url) {
+    url = url.trim();
+    var patterns = [
+      /(?:youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,
+      /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+      /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+      /(?:youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
+      /(?:music\.youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/
+    ];
+    for (var i = 0; i < patterns.length; i++) {
+      var m = url.match(patterns[i]);
+      if (m) return m[1];
+    }
+    // bare 11-char id
+    if (/^[a-zA-Z0-9_-]{11}$/.test(url)) return url;
+    return null;
+  }
+
+  function fetchTitle(videoId) {
+    // oEmbed doesn't require API key, works client-side (subject to CORS - YouTube allows it)
+    return fetch("https://www.youtube.com/oembed?url=" + encodeURIComponent("https://www.youtube.com/watch?v=" + videoId) + "&format=json")
+      .then(function (r) { if (!r.ok) throw new Error("oembed failed"); return r.json(); })
+      .then(function (data) { return data.title || videoId; })
+      .catch(function () { return videoId; });
+  }
+
+  // ---------- Add / remove ----------
+  function showFeedback(msg) {
+    els.addFeedback.textContent = msg || "";
+    if (msg) {
+      setTimeout(function () {
+        if (els.addFeedback.textContent === msg) els.addFeedback.textContent = "";
+      }, 3500);
+    }
+  }
+
+  function addFromInput() {
+    var raw = els.urlInput.value;
+    if (!raw || !raw.trim()) return;
+    var id = extractVideoId(raw);
+    if (!id) {
+      showFeedback("Не похоже на ссылку YouTube. Попробуй ещё раз.");
+      return;
+    }
+    if (playlist.some(function (t) { return t.id === id; })) {
+      showFeedback("Этот трек уже есть в очереди.");
+      els.urlInput.value = "";
+      return;
+    }
+
+    var placeholderTrack = {
+      id: id,
+      title: "Загружаю название…",
+      thumb: "https://i.ytimg.com/vi/" + id + "/mqdefault.jpg",
+      addedAt: Date.now()
+    };
+    playlist.push(placeholderTrack);
+    savePlaylist();
+    if (shuffleOn) buildShuffleOrder(currentIndex >= 0);
+    renderQueue();
+    els.urlInput.value = "";
+    showFeedback("");
+
+    var wasEmpty = playlist.length === 1 && currentIndex === -1;
+
+    fetchTitle(id).then(function (title) {
+      var track = playlist.find(function (t) { return t.id === id; });
+      if (track) {
+        track.title = title;
+        savePlaylist();
+        renderQueue();
+        if (currentIndex >= 0 && playlist[currentIndex] && playlist[currentIndex].id === id) {
+          updateNowPlayingText();
+        }
+      }
+    });
+
+    if (wasEmpty) {
+      playIndex(0);
+    }
+  }
+
+  function removeTrack(id) {
+    var removedIndex = playlist.findIndex(function (t) { return t.id === id; });
+    if (removedIndex === -1) return;
+
+    var wasCurrent = removedIndex === currentIndex;
+    playlist.splice(removedIndex, 1);
+
+    if (removedIndex < currentIndex) {
+      currentIndex -= 1;
+    } else if (wasCurrent) {
+      if (playlist.length === 0) {
+        currentIndex = -1;
+        stopAndClearPlayer();
+      } else {
+        currentIndex = Math.min(removedIndex, playlist.length - 1);
+        playIndex(currentIndex);
+      }
+    }
+
+    savePlaylist();
+    saveIndex();
+    if (shuffleOn) buildShuffleOrder(currentIndex >= 0);
+    renderQueue();
+  }
+
+  function clearAll() {
+    playlist = [];
+    currentIndex = -1;
+    shuffleOrder = [];
+    shufflePos = -1;
+    savePlaylist();
+    saveIndex();
+    stopAndClearPlayer();
+    renderQueue();
+  }
+
+  // ---------- Player ----------
+  window.onYouTubeIframeAPIReady = function () {
+    playerReady = true;
+    if (pendingLoadIndex !== null) {
+      var idx = pendingLoadIndex;
+      pendingLoadIndex = null;
+      playIndex(idx);
+    } else if (currentIndex >= 0 && playlist[currentIndex]) {
+      buildPlayerFor(playlist[currentIndex].id, false);
+      updateNowPlayingText();
+    }
+  };
+
+  function ensureVideoElement() {
+    if (document.getElementById("ytPlayerFrame")) return;
+    els.videoWrap.classList.remove("empty");
+    els.videoWrap.innerHTML = '<div id="ytPlayerFrame"></div>';
+  }
+
+  function buildPlayerFor(videoId, autoplay) {
+    ensureVideoElement();
+    if (player) {
+      player.loadVideoById(videoId);
+      if (!autoplay) { player.cueVideoById(videoId); }
+      return;
+    }
+    player = new YT.Player("ytPlayerFrame", {
+      videoId: videoId,
+      host: "https://www.youtube-nocookie.com",
+      playerVars: {
+        autoplay: autoplay ? 1 : 0,
+        rel: 0,
+        playsinline: 1,
+        origin: window.location.origin,
+        enablejsapi: 1
+      },
+      events: {
+        onReady: function () {
+          try {
+            var frame = player.getIframe();
+            if (frame) frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+          } catch (e) {}
+          if (autoplay) player.playVideo();
+        },
+        onStateChange: onPlayerStateChange,
+        onError: onPlayerError
+      }
+    });
+  }
+
+  function onPlayerStateChange(event) {
+    if (event.data === YT.PlayerState.PLAYING) {
+      isPlaying = true;
+      updatePlayIcon();
+    } else if (event.data === YT.PlayerState.PAUSED) {
+      isPlaying = false;
+      updatePlayIcon();
+    } else if (event.data === YT.PlayerState.ENDED) {
+      handleTrackEnded();
+    }
+  }
+
+  function onPlayerError(event) {
+    var code = event.data;
+
+    if (code === 153 || code === 150 || code === 101) {
+      showEmbedBlockedFallback(playlist[currentIndex]);
+      return;
+    }
+
+    var message;
+    if (code === 100) {
+      message = "Видео удалено или скрыто.";
+    } else if (code === 2) {
+      message = "Некорректная ссылка на видео.";
+    } else {
+      message = "Не удалось воспроизвести это видео (код " + code + ").";
+    }
+    showFeedback(message);
+
+    if (currentIndex >= 0 && currentIndex < playlist.length - 1) {
+      playIndex(currentIndex + 1, true);
+    } else {
+      isPlaying = false;
+      updatePlayIcon();
+    }
+  }
+
+  function showEmbedBlockedFallback(track) {
+    isPlaying = false;
+    updatePlayIcon();
+    if (!track) return;
+    var watchUrl = "https://www.youtube.com/watch?v=" + track.id;
+    els.videoWrap.classList.add("empty");
+    els.videoWrap.innerHTML =
+      '<p>Этот браузер не отправляет YouTube нужный заголовок страницы, поэтому видео тут не запускается (ошибка 153). ' +
+      'Это ограничение самого YouTube для встроенных плееров, не трека — открой видео напрямую:</p>' +
+      '<p style="margin-top:14px;"><a href="' + watchUrl + '" target="_blank" rel="noopener" ' +
+      'style="display:inline-block;background:var(--md-primary);color:var(--md-on-primary);' +
+      'padding:12px 22px;border-radius:999px;text-decoration:none;font-size:14px;font-weight:500;">' +
+      'Смотреть на YouTube</a></p>';
+  }
+
+  function handleTrackEnded() {
+    var next = peekNextIndex();
+    if (next !== null) {
+      playIndex(next, true);
+      return;
+    }
+    // reached end of our queue
+    if (autoRecommend) {
+      // Hand control to YouTube's own related-video autoplay by loading the last
+      // video with autoplay + related videos enabled and letting YT continue.
+      // We detach from "our queue index" so subsequent ENDED events don't loop.
+      currentIndex = playlist.length; // out of range => "handed off to YouTube"
+      saveIndex();
+      updateNowPlayingText(true);
+      renderQueue();
+    } else {
+      isPlaying = false;
+      updatePlayIcon();
+    }
+  }
+
+  // Returns the playlist index that should play next, or null if the queue is exhausted.
+  function peekNextIndex() {
+    if (shuffleOn) {
+      if (shufflePos < shuffleOrder.length - 1) return shuffleOrder[shufflePos + 1];
+      return null;
+    }
+    if (currentIndex >= 0 && currentIndex < playlist.length - 1) return currentIndex + 1;
+    return null;
+  }
+
+  function peekPrevIndex() {
+    if (shuffleOn) {
+      if (shufflePos > 0) return shuffleOrder[shufflePos - 1];
+      return null;
+    }
+    if (currentIndex > 0) return currentIndex - 1;
+    return null;
+  }
+
+  function playIndex(index, autoplay) {
+    if (index < 0 || index >= playlist.length) return;
+    if (autoplay === undefined) autoplay = true;
+
+    if (shuffleOn) {
+      var pos = shuffleOrder.indexOf(index);
+      if (pos === -1) {
+        // playlist changed or index picked manually from the queue list — rebuild order from here
+        buildShuffleOrder(false);
+        pos = shuffleOrder.indexOf(index);
+        if (pos === -1) { shuffleOrder.unshift(index); pos = 0; }
+      }
+      shufflePos = pos;
+    }
+
+    if (!playerReady) {
+      pendingLoadIndex = index;
+      currentIndex = index;
+      saveIndex();
+      updateNowPlayingText();
+      renderQueue();
+      return;
+    }
+
+    currentIndex = index;
+    saveIndex();
+    buildPlayerFor(playlist[index].id, autoplay);
+    updateNowPlayingText();
+    renderQueue();
+  }
+
+  function stopAndClearPlayer() {
+    if (player && player.stopVideo) {
+      try { player.stopVideo(); } catch (e) {}
+    }
+    els.videoWrap.innerHTML = "";
+    els.videoWrap.classList.add("empty");
+    els.videoWrap.innerHTML = '<p>Добавь первую ссылку — плеер запустится прямо здесь. Когда очередь закончится, я передам эстафету рекомендациям ютуба, как ты и просила.</p>';
+    isPlaying = false;
+    updatePlayIcon();
+    updateNowPlayingText();
+  }
+
+  function togglePlayPause() {
+    if (!player) {
+      if (playlist.length > 0) playIndex(currentIndex >= 0 ? currentIndex : 0);
+      return;
+    }
+    if (isPlaying) {
+      player.pauseVideo();
+    } else {
+      player.playVideo();
+    }
+  }
+
+  function goNext() {
+    if (playlist.length === 0) return;
+    if (currentIndex === -1) {
+      playIndex(shuffleOn ? shuffleOrder[0] : 0);
+      return;
+    }
+    var next = peekNextIndex();
+    if (next !== null) playIndex(next);
+  }
+
+  function goPrev() {
+    if (playlist.length === 0) return;
+    if (currentIndex === -1) {
+      playIndex(shuffleOn ? shuffleOrder[0] : 0);
+      return;
+    }
+    var prev = peekPrevIndex();
+    playIndex(prev !== null ? prev : currentIndex);
+  }
+
+  // ---------- UI render ----------
+  function updatePlayIcon() {
+    els.playIcon.innerHTML = isPlaying ? ICON_PAUSE : ICON_PLAY;
+    els.playBtn.classList.toggle("is-playing", isPlaying);
+  }
+
+  function updateNowPlayingText(handedOff) {
+    if (handedOff) {
+      els.npTitle.textContent = "Дальше — что предложит YouTube";
+      els.npSub.textContent = "Твоя очередь закончилась, эстафета передана рекомендациям";
+      return;
+    }
+    if (currentIndex < 0 || !playlist[currentIndex]) {
+      els.npTitle.textContent = "Ничего не играет";
+      els.npSub.textContent = "Добавь ссылку, чтобы начать";
+      return;
+    }
+    var track = playlist[currentIndex];
+    els.npTitle.textContent = track.title;
+    els.npSub.textContent = "Трек " + (currentIndex + 1) + " из " + playlist.length;
+  }
+
+  function renderQueue() {
+    els.queueCount.textContent = playlist.length + " " + pluralTracks(playlist.length) + " в очереди";
+
+    if (playlist.length === 0) {
+      els.queueList.innerHTML = '<div class="queue-empty">Список пуст.<br>Вставь ссылку выше — она появится тут.</div>';
+      return;
+    }
+
+    var html = "";
+    for (var i = 0; i < playlist.length; i++) {
+      var t = playlist[i];
+      var isCurrent = i === currentIndex;
+      html += '<div class="q-item' + (isCurrent ? " current" : "") + '" data-index="' + i + '">' +
+        '<img class="q-thumb" src="' + t.thumb + '" alt="" loading="lazy" />' +
+        '<div class="q-text">' +
+          '<div class="q-title">' + escapeHtml(t.title) + '</div>' +
+          '<div class="q-index">#' + (i + 1) + (isCurrent ? " · сейчас играет" : "") + '</div>' +
+        '</div>' +
+        '<button class="q-remove" data-remove-index="' + i + '" title="Удалить">' +
+          '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z"/></svg>' +
+        '</button>' +
+      '</div>';
+    }
+    els.queueList.innerHTML = html;
+  }
+
+  function pluralTracks(n) {
+    var mod10 = n % 10, mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return "трек";
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return "трека";
+    return "треков";
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // ---------- Mode toggle ----------
+  function setMode(auto) {
+    autoRecommend = auto;
+    saveMode();
+    els.modeQueueBtn.classList.toggle("active", !auto);
+    els.modeAutoBtn.classList.toggle("active", auto);
+    els.hintText.textContent = auto
+      ? "Режим «+ рекомендации»: как только твой список закончится, дальше пойдут рекомендации YouTube — как после обычного видео."
+      : "Режим «мой список»: плеер идёт строго по твоей очереди и останавливается в конце.";
+  }
+
+  // ---------- Events ----------
+  els.addBtn.addEventListener("click", addFromInput);
+  els.urlInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") addFromInput();
+  });
+
+  els.playBtn.addEventListener("click", togglePlayPause);
+  els.nextBtn.addEventListener("click", goNext);
+  els.prevBtn.addEventListener("click", goPrev);
+  els.shuffleBtn.addEventListener("click", function () { setShuffle(!shuffleOn); });
+
+  els.modeQueueBtn.addEventListener("click", function () { setMode(false); });
+  els.modeAutoBtn.addEventListener("click", function () { setMode(true); });
+
+  els.clearBtn.addEventListener("click", function () {
+    if (playlist.length === 0) return;
+    if (confirm("Удалить все треки из очереди?")) clearAll();
+  });
+
+  els.queueList.addEventListener("click", function (e) {
+    var removeBtn = e.target.closest("[data-remove-index]");
+    if (removeBtn) {
+      e.stopPropagation();
+      var idx = parseInt(removeBtn.getAttribute("data-remove-index"), 10);
+      var track = playlist[idx];
+      if (track) removeTrack(track.id);
+      return;
+    }
+    var item = e.target.closest("[data-index]");
+    if (item) {
+      var i = parseInt(item.getAttribute("data-index"), 10);
+      playIndex(i);
+    }
+  });
+
+  // ---------- Init ----------
+  loadState();
+  renderQueue();
+  setMode(autoRecommend);
+  els.shuffleBtn.classList.toggle("active", shuffleOn);
+  if (shuffleOn) buildShuffleOrder(true);
+  updateNowPlayingText();
+
+  if (playlist.length > 0 && currentIndex >= 0) {
+    // will be picked up by onYouTubeIframeAPIReady via pendingLoadIndex logic
+    // but since currentIndex is already set, just wait for API and cue (not autoplay)
+    pendingLoadIndex = null;
+  }
+})();
+</script>
+
+</body>
+</html>

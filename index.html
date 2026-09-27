@@ -1009,9 +1009,10 @@
 
       if (player && lastTrack) {
         try {
-          // 'RD' + videoId loads YouTube's algorithmic Mix built from that video,
-          // which behaves like an endless radio/recommendations queue.
-          player.loadPlaylist({ list: "RD" + lastTrack.id });
+          // 'RD' + videoId loads YouTube's algorithmic Mix built from that video.
+          // YouTube almost always puts the seed video itself as item 0 in the Mix,
+          // so start at index 1 to avoid an immediate repeat of the track that just ended.
+          player.loadPlaylist({ list: "RD" + lastTrack.id, index: 1 });
         } catch (e) {
           // Fallback: at least keep playing something related instead of just sitting on ENDED.
           try { player.loadVideoById(lastTrack.id); } catch (e2) {}

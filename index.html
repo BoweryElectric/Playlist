@@ -210,6 +210,7 @@
     align-items: center;
     gap: 10px;
     margin-top: 18px;
+    flex-wrap: wrap;
   }
 
   .ctrl-btn {
@@ -264,9 +265,10 @@
   .ctrl-play svg { width: 26px; height: 26px; }
 
   .mode-toggle {
-    margin-left: auto;
     display: flex;
     gap: 6px;
+    width: 100%;
+    margin-top: 4px;
   }
   .chip {
     background: rgba(255,255,255,0.08);
@@ -279,7 +281,10 @@
     cursor: pointer;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
+    white-space: nowrap;
+    flex: 1;
     transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   }
   .chip.active {
@@ -996,13 +1001,22 @@
 
     // reached end of our queue
     if (autoRecommend) {
-      // Hand control to YouTube's own related-video autoplay by loading the last
-      // video with autoplay + related videos enabled and letting YT continue.
-      // We detach from "our queue index" so subsequent ENDED events don't loop.
+      var lastTrack = playlist[currentIndex];
       currentIndex = playlist.length; // out of range => "handed off to YouTube"
       saveIndex();
       updateNowPlayingText(true);
       renderQueue();
+
+      if (player && lastTrack) {
+        try {
+          // 'RD' + videoId loads YouTube's algorithmic Mix built from that video,
+          // which behaves like an endless radio/recommendations queue.
+          player.loadPlaylist({ list: "RD" + lastTrack.id });
+        } catch (e) {
+          // Fallback: at least keep playing something related instead of just sitting on ENDED.
+          try { player.loadVideoById(lastTrack.id); } catch (e2) {}
+        }
+      }
     } else {
       isPlaying = false;
       updatePlayIcon();

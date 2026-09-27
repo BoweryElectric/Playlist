@@ -1006,7 +1006,7 @@
 
 
   // ---------- Player ----------
-  window.onYouTubeIframeAPIReady = function () {
+  function initYouTubePlayer() {
     playerReady = true;
     if (pendingLoadIndex !== null) {
       var idx = pendingLoadIndex;
@@ -1016,7 +1016,18 @@
       buildPlayerFor(playlist[currentIndex].id, false);
       updateNowPlayingText();
     }
-  };
+  }
+
+  // On a fast/cached reload (F5), the YouTube API script can finish loading
+  // and fire its one-shot ready signal before this inline script has even
+  // run — window.onYouTubeIframeAPIReady wouldn't exist yet, so the call is
+  // lost for good and the player never builds. Guard against that: if the
+  // API is already sitting on window by the time we get here, init right away.
+  if (window.YT && window.YT.Player) {
+    initYouTubePlayer();
+  } else {
+    window.onYouTubeIframeAPIReady = initYouTubePlayer;
+  }
 
   function ensureVideoElement() {
     if (document.getElementById("ytPlayerFrame")) return;

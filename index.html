@@ -1337,11 +1337,12 @@
   updateNowPlayingText();
 
   setSyncStatus(null, "Проверяю расширение…");
+  window.postMessage({ source: "eko-playlist-page", type: "PING" }, "*");
   setTimeout(function () {
     if (!extensionDetected) {
       setSyncStatus("missing", "Расширение не найдено");
     }
-  }, 1500);
+  }, 2500);
 
   if (playlist.length > 0 && currentIndex >= 0) {
     // will be picked up by onYouTubeIframeAPIReady via pendingLoadIndex logic

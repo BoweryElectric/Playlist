@@ -339,6 +339,13 @@
   }
   .chip svg { width: 14px; height: 14px; fill: currentColor; }
 
+  .low-quality-row {
+    display: none;
+    width: 100%;
+  }
+  .low-quality-row.visible { display: flex; }
+  .low-quality-row .chip { flex: none; padding: 7px 14px; font-size: 12px; }
+
   .hint {
     margin-top: 14px;
     font-size: 12.5px;
@@ -560,6 +567,13 @@
             + рекомендации
           </button>
         </div>
+
+        <div class="low-quality-row" id="lowQualityRow">
+          <button class="chip" id="lowQualityBtn" title="Экономия ресурсов: снизить качество видео до 240p">
+            <svg viewBox="0 0 24 24"><path d="M7 2V4H8V18C8 19.1 8.9 20 10 20H14C15.1 20 16 19.1 16 18V4H17V2H7M10 4H14V18H10V4Z"/></svg>
+            снизить нагрузку (240p)
+          </button>
+        </div>
       </div>
 
       <div class="hint" id="hintText">Режим «мой список»: плеер идёт строго по твоей очереди и останавливается в конце.</div>
@@ -599,6 +613,7 @@
   var STORAGE_SHUFFLE_KEY = "yt_playlist_material_shuffle_v1";
   var STORAGE_REPEAT_KEY = "yt_playlist_material_repeat_v1";
   var STORAGE_AUDIO_ONLY_KEY = "yt_playlist_material_audio_only_v1";
+  var STORAGE_LOW_QUALITY_KEY = "yt_playlist_material_low_quality_v1";
 
   /** @type {{id:string, title:string, thumb:string, addedAt:number}[]} */
   var playlist = [];
@@ -609,6 +624,7 @@
   var shufflePos = -1;   // position within shuffleOrder that is currently playing
   var repeatMode = "off"; // "off" | "all" | "one"
   var audioOnly = false;
+  var lowQuality = false; // when true, force a low video resolution to reduce GPU decode load
   var player = null;
   var playerReady = false;
   var isPlaying = false;
@@ -630,6 +646,8 @@
     shuffleBtn: document.getElementById("shuffleBtn"),
     repeatBtn: document.getElementById("repeatBtn"),
     audioOnlyBtn: document.getElementById("audioOnlyBtn"),
+    lowQualityBtn: document.getElementById("lowQualityBtn"),
+    lowQualityRow: document.getElementById("lowQualityRow"),
     modeQueueBtn: document.getElementById("modeQueueBtn"),
     modeAutoBtn: document.getElementById("modeAutoBtn"),
     hintText: document.getElementById("hintText"),
@@ -673,6 +691,10 @@
     try {
       audioOnly = localStorage.getItem(STORAGE_AUDIO_ONLY_KEY) === "1";
     } catch (e) { audioOnly = false; }
+
+    try {
+      lowQuality = localStorage.getItem(STORAGE_LOW_QUALITY_KEY) === "1";
+    } catch (e) { lowQuality = false; }
   }
 
   function savePlaylist() {
@@ -692,6 +714,9 @@
   }
   function saveAudioOnly() {
     localStorage.setItem(STORAGE_AUDIO_ONLY_KEY, audioOnly ? "1" : "0");
+  }
+  function saveLowQuality() {
+    localStorage.setItem(STORAGE_LOW_QUALITY_KEY, lowQuality ? "1" : "0");
   }
 
   // ---------- Shuffle ----------
@@ -756,6 +781,7 @@
     els.audioOnlyBtn.classList.toggle("active", on);
     els.audioOnlyBtn.title = on ? "Только звук: показать видео" : "Только звук: скрыть видео";
     els.videoWrap.classList.toggle("audio-only", on);
+    els.lowQualityRow.classList.toggle("visible", on);
     updateAudioCover();
   }
 
@@ -766,6 +792,24 @@
       var thumb = playlist[currentIndex].thumb;
       els.audioCover.style.backgroundImage = thumb ? "url('" + thumb + "')" : "none";
     }
+  }
+
+  // ---------- Low quality (reduced decode load) ----------
+  function setLowQuality(on) {
+    lowQuality = on;
+    saveLowQuality();
+    els.lowQualityBtn.classList.toggle("active", on);
+    els.lowQualityBtn.title = on
+      ? "Экономия ресурсов: включена (240p) — выключить"
+      : "Экономия ресурсов: снизить качество видео до 240p";
+    applyQualityPreference();
+  }
+
+  function applyQualityPreference() {
+    if (!player || !player.setPlaybackQuality) return;
+    try {
+      player.setPlaybackQuality(lowQuality ? "small" : "default");
+    } catch (e) {}
   }
 
   // ---------- YouTube URL parsing ----------
@@ -986,6 +1030,7 @@
     if (player) {
       player.loadVideoById(videoId);
       if (!autoplay) { player.cueVideoById(videoId); }
+      applyQualityPreference();
       return;
     }
     player = new YT.Player("ytPlayerFrame", {
@@ -1004,6 +1049,7 @@
             var frame = player.getIframe();
             if (frame) frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
           } catch (e) {}
+          applyQualityPreference();
           if (autoplay) player.playVideo();
         },
         onStateChange: onPlayerStateChange,
@@ -1107,6 +1153,7 @@
           // YouTube almost always puts the seed video itself as item 0 in the Mix,
           // so start at index 1 to avoid an immediate repeat of the track that just ended.
           player.loadPlaylist({ list: "RD" + lastTrack.id, index: 1 });
+          applyQualityPreference();
         } catch (e) {
           // Fallback: at least keep playing something related instead of just sitting on ENDED.
           try { player.loadVideoById(lastTrack.id); } catch (e2) {}
@@ -1318,6 +1365,7 @@
   els.shuffleBtn.addEventListener("click", function () { setShuffle(!shuffleOn); });
   els.repeatBtn.addEventListener("click", cycleRepeat);
   els.audioOnlyBtn.addEventListener("click", function () { setAudioOnly(!audioOnly); });
+  els.lowQualityBtn.addEventListener("click", function () { setLowQuality(!lowQuality); });
 
   els.modeQueueBtn.addEventListener("click", function () { setMode(false); });
   els.modeAutoBtn.addEventListener("click", function () { setMode(true); });
@@ -1358,6 +1406,7 @@
   els.shuffleBtn.classList.toggle("active", shuffleOn);
   if (shuffleOn) buildShuffleOrder(true);
   setRepeat(repeatMode);
+  setLowQuality(lowQuality);
   setAudioOnly(audioOnly);
   updateNowPlayingText();
 

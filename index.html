@@ -158,6 +158,7 @@
     border-radius: var(--shape-l);
     overflow: hidden;
     background: #000;
+    transition: max-height 0.25s ease, opacity 0.2s ease, margin 0.25s ease;
   }
   .video-wrap iframe {
     position: absolute;
@@ -165,6 +166,50 @@
     width: 100%;
     height: 100%;
     border: 0;
+  }
+
+  .video-wrap.audio-only {
+    max-height: 0;
+    aspect-ratio: unset;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .audio-cover {
+    display: none;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    max-height: 320px;
+    border-radius: var(--shape-l);
+    background-size: cover;
+    background-position: center;
+    background-color: var(--md-surface-container-highest);
+    position: relative;
+    overflow: hidden;
+  }
+  .audio-cover.visible { display: block; }
+  .audio-cover::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, transparent 60%, rgba(0,0,0,0.35) 100%);
+  }
+  .audio-cover .audio-cover-icon {
+    position: absolute;
+    bottom: 14px;
+    right: 14px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .audio-cover .audio-cover-icon svg {
+    width: 18px;
+    height: 18px;
+    fill: #fff;
   }
 
   .video-wrap.empty {
@@ -471,6 +516,11 @@
       <div class="video-wrap empty" id="videoWrap">
         <p>Добавь первую ссылку — плеер запустится прямо здесь. Когда очередь закончится, я передам эстафету рекомендациям ютуба, как ты и просила.</p>
       </div>
+      <div class="audio-cover" id="audioCover">
+        <div class="audio-cover-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 3V13.55C11.41 13.21 10.73 13 10 13C7.79 13 6 14.79 6 17S7.79 21 10 21 14 19.21 14 17V7H18V3H12Z"/></svg>
+        </div>
+      </div>
 
       <div class="now-playing">
         <div class="np-text">
@@ -495,6 +545,9 @@
         <button class="ctrl-btn" id="repeatBtn" title="Повтор: выключен">
           <svg id="repeatIcon" viewBox="0 0 24 24"><path d="M7 7H17V10L21 6L17 2V5H5V11H7V7M17 17H7V14L3 18L7 22V19H19V13H17V17Z"/></svg>
           <span class="repeat-one-badge">1</span>
+        </button>
+        <button class="ctrl-btn" id="audioOnlyBtn" title="Только звук: скрыть видео">
+          <svg id="audioOnlyIcon" viewBox="0 0 24 24"><path d="M12 3V13.55C11.41 13.21 10.73 13 10 13C7.79 13 6 14.79 6 17S7.79 21 10 21 14 19.21 14 17V7H18V3H12Z"/></svg>
         </button>
 
         <div class="mode-toggle">
@@ -545,6 +598,7 @@
   var STORAGE_MODE_KEY = "yt_playlist_material_mode_v1";
   var STORAGE_SHUFFLE_KEY = "yt_playlist_material_shuffle_v1";
   var STORAGE_REPEAT_KEY = "yt_playlist_material_repeat_v1";
+  var STORAGE_AUDIO_ONLY_KEY = "yt_playlist_material_audio_only_v1";
 
   /** @type {{id:string, title:string, thumb:string, addedAt:number}[]} */
   var playlist = [];
@@ -554,16 +608,19 @@
   var shuffleOrder = []; // array of playlist indices in shuffled play order
   var shufflePos = -1;   // position within shuffleOrder that is currently playing
   var repeatMode = "off"; // "off" | "all" | "one"
+  var audioOnly = false;
   var player = null;
   var playerReady = false;
   var isPlaying = false;
   var pendingLoadIndex = null; // if user picks a video before player is ready
+  var inExternalMix = false; // true once we've handed control to a YouTube Mix playlist
 
   var els = {
     urlInput: document.getElementById("urlInput"),
     addBtn: document.getElementById("addBtn"),
     addFeedback: document.getElementById("addFeedback"),
     videoWrap: document.getElementById("videoWrap"),
+    audioCover: document.getElementById("audioCover"),
     npTitle: document.getElementById("npTitle"),
     npSub: document.getElementById("npSub"),
     playBtn: document.getElementById("playBtn"),
@@ -572,6 +629,7 @@
     nextBtn: document.getElementById("nextBtn"),
     shuffleBtn: document.getElementById("shuffleBtn"),
     repeatBtn: document.getElementById("repeatBtn"),
+    audioOnlyBtn: document.getElementById("audioOnlyBtn"),
     modeQueueBtn: document.getElementById("modeQueueBtn"),
     modeAutoBtn: document.getElementById("modeAutoBtn"),
     hintText: document.getElementById("hintText"),
@@ -611,6 +669,10 @@
       var rep = localStorage.getItem(STORAGE_REPEAT_KEY);
       repeatMode = (rep === "all" || rep === "one") ? rep : "off";
     } catch (e) { repeatMode = "off"; }
+
+    try {
+      audioOnly = localStorage.getItem(STORAGE_AUDIO_ONLY_KEY) === "1";
+    } catch (e) { audioOnly = false; }
   }
 
   function savePlaylist() {
@@ -627,6 +689,9 @@
   }
   function saveRepeat() {
     localStorage.setItem(STORAGE_REPEAT_KEY, repeatMode);
+  }
+  function saveAudioOnly() {
+    localStorage.setItem(STORAGE_AUDIO_ONLY_KEY, audioOnly ? "1" : "0");
   }
 
   // ---------- Shuffle ----------
@@ -682,6 +747,25 @@
   function cycleRepeat() {
     var next = repeatMode === "off" ? "all" : (repeatMode === "all" ? "one" : "off");
     setRepeat(next);
+  }
+
+  // ---------- Audio-only mode ----------
+  function setAudioOnly(on) {
+    audioOnly = on;
+    saveAudioOnly();
+    els.audioOnlyBtn.classList.toggle("active", on);
+    els.audioOnlyBtn.title = on ? "Только звук: показать видео" : "Только звук: скрыть видео";
+    els.videoWrap.classList.toggle("audio-only", on);
+    updateAudioCover();
+  }
+
+  function updateAudioCover() {
+    var showCover = audioOnly && currentIndex >= 0 && playlist[currentIndex];
+    els.audioCover.classList.toggle("visible", !!showCover);
+    if (showCover) {
+      var thumb = playlist[currentIndex].thumb;
+      els.audioCover.style.backgroundImage = thumb ? "url('" + thumb + "')" : "none";
+    }
   }
 
   // ---------- YouTube URL parsing ----------
@@ -982,6 +1066,15 @@
   }
 
   function handleTrackEnded() {
+    if (inExternalMix) {
+      // Inside YouTube's own Mix playlist now — let it advance itself.
+      // A stray ENDED here (e.g. end of the whole Mix) just nudges it forward.
+      if (player && player.nextVideo) {
+        try { player.nextVideo(); } catch (e) {}
+      }
+      return;
+    }
+
     if (repeatMode === "one") {
       playIndex(currentIndex, true);
       return;
@@ -1003,6 +1096,7 @@
     if (autoRecommend) {
       var lastTrack = playlist[currentIndex];
       currentIndex = playlist.length; // out of range => "handed off to YouTube"
+      inExternalMix = true;
       saveIndex();
       updateNowPlayingText(true);
       renderQueue();
@@ -1051,6 +1145,8 @@
     if (index < 0 || index >= playlist.length) return;
     if (autoplay === undefined) autoplay = true;
 
+    inExternalMix = false;
+
     if (shuffleOn) {
       var pos = shuffleOrder.indexOf(index);
       if (pos === -1) {
@@ -1086,6 +1182,7 @@
     els.videoWrap.classList.add("empty");
     els.videoWrap.innerHTML = '<p>Добавь первую ссылку — плеер запустится прямо здесь. Когда очередь закончится, я передам эстафету рекомендациям ютуба, как ты и просила.</p>';
     isPlaying = false;
+    inExternalMix = false;
     updatePlayIcon();
     updateNowPlayingText();
   }
@@ -1103,6 +1200,12 @@
   }
 
   function goNext() {
+    if (inExternalMix) {
+      if (player && player.nextVideo) {
+        try { player.nextVideo(); } catch (e) {}
+      }
+      return;
+    }
     if (playlist.length === 0) return;
     if (currentIndex === -1) {
       playIndex(shuffleOn ? shuffleOrder[0] : 0);
@@ -1113,6 +1216,12 @@
   }
 
   function goPrev() {
+    if (inExternalMix) {
+      if (player && player.previousVideo) {
+        try { player.previousVideo(); } catch (e) {}
+      }
+      return;
+    }
     if (playlist.length === 0) return;
     if (currentIndex === -1) {
       playIndex(shuffleOn ? shuffleOrder[0] : 0);
@@ -1132,16 +1241,19 @@
     if (handedOff) {
       els.npTitle.textContent = "Дальше — что предложит YouTube";
       els.npSub.textContent = "Твоя очередь закончилась, эстафета передана рекомендациям";
+      updateAudioCover();
       return;
     }
     if (currentIndex < 0 || !playlist[currentIndex]) {
       els.npTitle.textContent = "Ничего не играет";
       els.npSub.textContent = "Добавь ссылку, чтобы начать";
+      updateAudioCover();
       return;
     }
     var track = playlist[currentIndex];
     els.npTitle.textContent = track.title;
     els.npSub.textContent = "Трек " + (currentIndex + 1) + " из " + playlist.length;
+    updateAudioCover();
   }
 
   function renderQueue() {
@@ -1205,6 +1317,7 @@
   els.prevBtn.addEventListener("click", goPrev);
   els.shuffleBtn.addEventListener("click", function () { setShuffle(!shuffleOn); });
   els.repeatBtn.addEventListener("click", cycleRepeat);
+  els.audioOnlyBtn.addEventListener("click", function () { setAudioOnly(!audioOnly); });
 
   els.modeQueueBtn.addEventListener("click", function () { setMode(false); });
   els.modeAutoBtn.addEventListener("click", function () { setMode(true); });
@@ -1245,6 +1358,7 @@
   els.shuffleBtn.classList.toggle("active", shuffleOn);
   if (shuffleOn) buildShuffleOrder(true);
   setRepeat(repeatMode);
+  setAudioOnly(audioOnly);
   updateNowPlayingText();
 
   if (playlist.length > 0 && currentIndex >= 0) {

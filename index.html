@@ -158,7 +158,6 @@
     border-radius: var(--shape-l);
     overflow: hidden;
     background: #000;
-    transition: max-height 0.25s ease, opacity 0.2s ease, margin 0.25s ease;
   }
   .video-wrap iframe {
     position: absolute;
@@ -166,50 +165,6 @@
     width: 100%;
     height: 100%;
     border: 0;
-  }
-
-  .video-wrap.audio-only {
-    max-height: 0;
-    aspect-ratio: unset;
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .audio-cover {
-    display: none;
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    max-height: 320px;
-    border-radius: var(--shape-l);
-    background-size: cover;
-    background-position: center;
-    background-color: var(--md-surface-container-highest);
-    position: relative;
-    overflow: hidden;
-  }
-  .audio-cover.visible { display: block; }
-  .audio-cover::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, transparent 60%, rgba(0,0,0,0.35) 100%);
-  }
-  .audio-cover .audio-cover-icon {
-    position: absolute;
-    bottom: 14px;
-    right: 14px;
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    background: rgba(0,0,0,0.45);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .audio-cover .audio-cover-icon svg {
-    width: 18px;
-    height: 18px;
-    fill: #fff;
   }
 
   .video-wrap.empty {
@@ -309,42 +264,63 @@
   .ctrl-play.is-playing { border-radius: var(--shape-full); }
   .ctrl-play svg { width: 26px; height: 26px; }
 
-  .mode-toggle {
+  .bookmarks-sync {
     display: flex;
-    gap: 6px;
-    width: 100%;
-    margin-top: 4px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 10px 14px;
+    background: rgba(0,0,0,0.15);
+    border-radius: var(--shape-l);
+    flex-wrap: wrap;
   }
-  .chip {
-    background: rgba(255,255,255,0.08);
-    color: var(--md-on-primary-container);
-    border: 1px solid rgba(255,255,255,0.16);
-    border-radius: var(--shape-full);
-    padding: 8px 14px;
+  .bookmarks-sync-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-size: 12.5px;
+    color: var(--md-on-primary-container);
+    opacity: 0.85;
+  }
+  .sync-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--md-outline);
+    flex-shrink: 0;
+    transition: background 0.2s ease;
+  }
+  .sync-dot.connected { background: #8BD450; }
+  .sync-dot.missing { background: var(--md-error); }
+
+  .chip-btn {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    border: none;
+    border-radius: var(--shape-full);
+    padding: 8px 16px;
+    font-size: 12.5px;
+    font-weight: 500;
     font-family: inherit;
     cursor: pointer;
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 6px;
     white-space: nowrap;
-    flex: 1;
-    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    transition: filter 0.15s ease, opacity 0.15s ease;
   }
-  .chip.active {
-    background: var(--md-primary);
-    color: var(--md-on-primary);
-    border-color: transparent;
+  .chip-btn svg { width: 14px; height: 14px; fill: currentColor; }
+  .chip-btn:hover:not(:disabled) { filter: brightness(1.08); }
+  .chip-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
-  .chip svg { width: 14px; height: 14px; fill: currentColor; }
-
-  .low-quality-row {
-    display: none;
-    width: 100%;
+  .chip-btn.syncing svg { animation: sync-spin 0.9s linear infinite; }
+  @keyframes sync-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
-  .low-quality-row.visible { display: flex; }
-  .low-quality-row .chip { flex: none; padding: 7px 14px; font-size: 12px; }
 
   .hint {
     margin-top: 14px;
@@ -521,12 +497,7 @@
   <div class="layout">
     <section class="player-card">
       <div class="video-wrap empty" id="videoWrap">
-        <p>Добавь первую ссылку — плеер запустится прямо здесь. Когда очередь закончится, я передам эстафету рекомендациям ютуба, как ты и просила.</p>
-      </div>
-      <div class="audio-cover" id="audioCover">
-        <div class="audio-cover-icon">
-          <svg viewBox="0 0 24 24"><path d="M12 3V13.55C11.41 13.21 10.73 13 10 13C7.79 13 6 14.79 6 17S7.79 21 10 21 14 19.21 14 17V7H18V3H12Z"/></svg>
-        </div>
+        <p>Добавь первую ссылку — плеер запустится прямо здесь.</p>
       </div>
 
       <div class="now-playing">
@@ -553,30 +524,20 @@
           <svg id="repeatIcon" viewBox="0 0 24 24"><path d="M7 7H17V10L21 6L17 2V5H5V11H7V7M17 17H7V14L3 18L7 22V19H19V13H17V17Z"/></svg>
           <span class="repeat-one-badge">1</span>
         </button>
-        <button class="ctrl-btn" id="audioOnlyBtn" title="Только звук: скрыть видео">
-          <svg id="audioOnlyIcon" viewBox="0 0 24 24"><path d="M12 3V13.55C11.41 13.21 10.73 13 10 13C7.79 13 6 14.79 6 17S7.79 21 10 21 14 19.21 14 17V7H18V3H12Z"/></svg>
-        </button>
-
-        <div class="mode-toggle">
-          <button class="chip active" id="modeQueueBtn" title="Играть только мой список">
-            <svg viewBox="0 0 24 24"><path d="M4 10H16V8H4V10M4 14H12V12H4V14M4 18H12V16H4V18M20 4H4V6H20V4M18 14V9H16V14H14L17 18L20 14H18Z"/></svg>
-            мой список
-          </button>
-          <button class="chip" id="modeAutoBtn" title="После списка — рекомендации YouTube">
-            <svg viewBox="0 0 24 24"><path d="M4.5 11L11 4.5L12.4 5.9L7.3 11H20V13H7.3L12.4 18.1L11 19.5L4.5 13Z" transform="rotate(180 12 12)"/></svg>
-            + рекомендации
-          </button>
-        </div>
-
-        <div class="low-quality-row" id="lowQualityRow">
-          <button class="chip" id="lowQualityBtn" title="Экономия ресурсов: снизить качество видео до 240p">
-            <svg viewBox="0 0 24 24"><path d="M7 2V4H8V18C8 19.1 8.9 20 10 20H14C15.1 20 16 19.1 16 18V4H17V2H7M10 4H14V18H10V4Z"/></svg>
-            снизить нагрузку (240p)
-          </button>
-        </div>
       </div>
 
-      <div class="hint" id="hintText">Режим «мой список»: плеер идёт строго по твоей очереди и останавливается в конце.</div>
+      <div class="bookmarks-sync" id="bookmarksSync">
+        <div class="bookmarks-sync-status" id="bookmarksSyncStatus">
+          <span class="sync-dot" id="syncDot"></span>
+          <span id="syncStatusText">Проверяю расширение…</span>
+        </div>
+        <button class="chip-btn" id="syncBtn" title="Прочитать ссылки из папки закладок «playlist»" disabled>
+          <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4C7.58 4 4 7.58 4 12S7.58 20 12 20C15.73 20 18.84 17.45 19.73 14H17.65C16.83 16.33 14.61 18 12 18C8.69 18 6 15.31 6 12S8.69 6 12 6C13.66 6 15.14 6.69 16.22 7.78L13 11H20V4L17.65 6.35Z"/></svg>
+          Обновить из папки
+        </button>
+      </div>
+
+      <div class="hint" id="hintText">Плеер доигрывает очередь до конца и останавливается. Включи повтор, если хочешь зациклить список.</div>
     </section>
 
     <aside class="queue-card">
@@ -609,34 +570,26 @@
 
   var STORAGE_KEY = "yt_playlist_material_v1";
   var STORAGE_INDEX_KEY = "yt_playlist_material_index_v1";
-  var STORAGE_MODE_KEY = "yt_playlist_material_mode_v1";
   var STORAGE_SHUFFLE_KEY = "yt_playlist_material_shuffle_v1";
   var STORAGE_REPEAT_KEY = "yt_playlist_material_repeat_v1";
-  var STORAGE_AUDIO_ONLY_KEY = "yt_playlist_material_audio_only_v1";
-  var STORAGE_LOW_QUALITY_KEY = "yt_playlist_material_low_quality_v1";
 
   /** @type {{id:string, title:string, thumb:string, addedAt:number}[]} */
   var playlist = [];
   var currentIndex = -1;
-  var autoRecommend = false; // false = "мой список", true = "+ рекомендации"
   var shuffleOn = false;
   var shuffleOrder = []; // array of playlist indices in shuffled play order
   var shufflePos = -1;   // position within shuffleOrder that is currently playing
   var repeatMode = "off"; // "off" | "all" | "one"
-  var audioOnly = false;
-  var lowQuality = false; // when true, force a low video resolution to reduce GPU decode load
   var player = null;
   var playerReady = false;
   var isPlaying = false;
   var pendingLoadIndex = null; // if user picks a video before player is ready
-  var inExternalMix = false; // true once we've handed control to a YouTube Mix playlist
 
   var els = {
     urlInput: document.getElementById("urlInput"),
     addBtn: document.getElementById("addBtn"),
     addFeedback: document.getElementById("addFeedback"),
     videoWrap: document.getElementById("videoWrap"),
-    audioCover: document.getElementById("audioCover"),
     npTitle: document.getElementById("npTitle"),
     npSub: document.getElementById("npSub"),
     playBtn: document.getElementById("playBtn"),
@@ -645,18 +598,16 @@
     nextBtn: document.getElementById("nextBtn"),
     shuffleBtn: document.getElementById("shuffleBtn"),
     repeatBtn: document.getElementById("repeatBtn"),
-    audioOnlyBtn: document.getElementById("audioOnlyBtn"),
-    lowQualityBtn: document.getElementById("lowQualityBtn"),
-    lowQualityRow: document.getElementById("lowQualityRow"),
-    modeQueueBtn: document.getElementById("modeQueueBtn"),
-    modeAutoBtn: document.getElementById("modeAutoBtn"),
     hintText: document.getElementById("hintText"),
     queueList: document.getElementById("queueList"),
     queueCount: document.getElementById("queueCount"),
     clearBtn: document.getElementById("clearBtn"),
     exportBtn: document.getElementById("exportBtn"),
     importBtn: document.getElementById("importBtn"),
-    importFile: document.getElementById("importFile")
+    importFile: document.getElementById("importFile"),
+    syncBtn: document.getElementById("syncBtn"),
+    syncDot: document.getElementById("syncDot"),
+    syncStatusText: document.getElementById("syncStatusText")
   };
 
   var ICON_PLAY = '<path d="M8 5V19L19 12L8 5Z"/>';
@@ -676,10 +627,6 @@
     } catch (e) { currentIndex = -1; }
 
     try {
-      autoRecommend = localStorage.getItem(STORAGE_MODE_KEY) === "1";
-    } catch (e) { autoRecommend = false; }
-
-    try {
       shuffleOn = localStorage.getItem(STORAGE_SHUFFLE_KEY) === "1";
     } catch (e) { shuffleOn = false; }
 
@@ -687,14 +634,6 @@
       var rep = localStorage.getItem(STORAGE_REPEAT_KEY);
       repeatMode = (rep === "all" || rep === "one") ? rep : "off";
     } catch (e) { repeatMode = "off"; }
-
-    try {
-      audioOnly = localStorage.getItem(STORAGE_AUDIO_ONLY_KEY) === "1";
-    } catch (e) { audioOnly = false; }
-
-    try {
-      lowQuality = localStorage.getItem(STORAGE_LOW_QUALITY_KEY) === "1";
-    } catch (e) { lowQuality = false; }
   }
 
   function savePlaylist() {
@@ -703,20 +642,11 @@
   function saveIndex() {
     localStorage.setItem(STORAGE_INDEX_KEY, String(currentIndex));
   }
-  function saveMode() {
-    localStorage.setItem(STORAGE_MODE_KEY, autoRecommend ? "1" : "0");
-  }
   function saveShuffle() {
     localStorage.setItem(STORAGE_SHUFFLE_KEY, shuffleOn ? "1" : "0");
   }
   function saveRepeat() {
     localStorage.setItem(STORAGE_REPEAT_KEY, repeatMode);
-  }
-  function saveAudioOnly() {
-    localStorage.setItem(STORAGE_AUDIO_ONLY_KEY, audioOnly ? "1" : "0");
-  }
-  function saveLowQuality() {
-    localStorage.setItem(STORAGE_LOW_QUALITY_KEY, lowQuality ? "1" : "0");
   }
 
   // ---------- Shuffle ----------
@@ -772,44 +702,6 @@
   function cycleRepeat() {
     var next = repeatMode === "off" ? "all" : (repeatMode === "all" ? "one" : "off");
     setRepeat(next);
-  }
-
-  // ---------- Audio-only mode ----------
-  function setAudioOnly(on) {
-    audioOnly = on;
-    saveAudioOnly();
-    els.audioOnlyBtn.classList.toggle("active", on);
-    els.audioOnlyBtn.title = on ? "Только звук: показать видео" : "Только звук: скрыть видео";
-    els.videoWrap.classList.toggle("audio-only", on);
-    els.lowQualityRow.classList.toggle("visible", on);
-    updateAudioCover();
-  }
-
-  function updateAudioCover() {
-    var showCover = audioOnly && currentIndex >= 0 && playlist[currentIndex];
-    els.audioCover.classList.toggle("visible", !!showCover);
-    if (showCover) {
-      var thumb = playlist[currentIndex].thumb;
-      els.audioCover.style.backgroundImage = thumb ? "url('" + thumb + "')" : "none";
-    }
-  }
-
-  // ---------- Low quality (reduced decode load) ----------
-  function setLowQuality(on) {
-    lowQuality = on;
-    saveLowQuality();
-    els.lowQualityBtn.classList.toggle("active", on);
-    els.lowQualityBtn.title = on
-      ? "Экономия ресурсов: включена (240p) — выключить"
-      : "Экономия ресурсов: снизить качество видео до 240p";
-    applyQualityPreference();
-  }
-
-  function applyQualityPreference() {
-    if (!player || !player.setPlaybackQuality) return;
-    try {
-      player.setPlaybackQuality(lowQuality ? "small" : "default");
-    } catch (e) {}
   }
 
   // ---------- YouTube URL parsing ----------
@@ -1006,6 +898,113 @@
     reader.readAsText(file);
   }
 
+  // ---------- Bookmarks folder sync (via browser extension) ----------
+  var extensionDetected = false;
+  var syncInProgress = false;
+
+  function setSyncStatus(state, text) {
+    els.syncDot.classList.remove("connected", "missing");
+    if (state) els.syncDot.classList.add(state);
+    els.syncStatusText.textContent = text;
+  }
+
+  function setSyncingUI(on) {
+    syncInProgress = on;
+    els.syncBtn.classList.toggle("syncing", on);
+    els.syncBtn.disabled = on || !extensionDetected;
+  }
+
+  function importLinksFromBookmarks(links) {
+    var existingIds = {};
+    playlist.forEach(function (t) { existingIds[t.id] = true; });
+
+    var candidates = [];
+    (links || []).forEach(function (link) {
+      var id = extractVideoId(link.url || "");
+      if (!id || existingIds[id]) return;
+      existingIds[id] = true; // dedupe within this same sync batch too
+      candidates.push({ id: id, bookmarkTitle: link.title || "" });
+    });
+
+    if (candidates.length === 0) {
+      setSyncingUI(false);
+      showFeedback("Новых ссылок в папке «playlist» не нашлось — всё уже в очереди.");
+      return;
+    }
+
+    var wasEmpty = playlist.length === 0;
+    var addedCount = 0;
+    var remaining = candidates.length;
+
+    candidates.forEach(function (c) {
+      var placeholderTrack = {
+        id: c.id,
+        title: c.bookmarkTitle || "Загружаю название…",
+        thumb: "https://i.ytimg.com/vi/" + c.id + "/mqdefault.jpg",
+        addedAt: Date.now()
+      };
+      playlist.push(placeholderTrack);
+      addedCount++;
+
+      fetchTitle(c.id).then(function (title) {
+        var track = playlist.find(function (t) { return t.id === c.id; });
+        if (track) {
+          track.title = title;
+          savePlaylist();
+          renderQueue();
+          if (currentIndex >= 0 && playlist[currentIndex] && playlist[currentIndex].id === c.id) {
+            updateNowPlayingText();
+          }
+        }
+        remaining--;
+        if (remaining === 0) setSyncingUI(false);
+      });
+    });
+
+    savePlaylist();
+    if (shuffleOn) buildShuffleOrder(currentIndex >= 0);
+    renderQueue();
+    showFeedback("Добавлено из папки: " + addedCount + ".");
+
+    if (wasEmpty && addedCount > 0) {
+      playIndex(0);
+    }
+  }
+
+  function requestBookmarksSync() {
+    if (!extensionDetected || syncInProgress) return;
+    setSyncingUI(true);
+    window.postMessage({ source: "eko-playlist-page", type: "REQUEST_SYNC" }, "*");
+  }
+
+  window.addEventListener("message", function (event) {
+    if (event.source !== window) return;
+    var data = event.data;
+    if (!data || data.source !== "eko-playlist-extension") return;
+
+    if (data.type === "EXTENSION_PRESENT") {
+      extensionDetected = true;
+      els.syncBtn.disabled = syncInProgress;
+      setSyncStatus("connected", "Расширение подключено");
+      return;
+    }
+
+    if (data.type === "SYNC_RESULT") {
+      if (!data.ok) {
+        setSyncingUI(false);
+        if (data.error === "folder-not-found") {
+          showFeedback('Папка закладок "playlist" не найдена — создай её в браузере.');
+        } else {
+          showFeedback("Не удалось прочитать закладки. Попробуй ещё раз.");
+        }
+        return;
+      }
+      importLinksFromBookmarks(data.links);
+    }
+  });
+
+
+
   // ---------- Player ----------
   window.onYouTubeIframeAPIReady = function () {
     playerReady = true;
@@ -1030,7 +1029,6 @@
     if (player) {
       player.loadVideoById(videoId);
       if (!autoplay) { player.cueVideoById(videoId); }
-      applyQualityPreference();
       return;
     }
     player = new YT.Player("ytPlayerFrame", {
@@ -1049,7 +1047,6 @@
             var frame = player.getIframe();
             if (frame) frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
           } catch (e) {}
-          applyQualityPreference();
           if (autoplay) player.playVideo();
         },
         onStateChange: onPlayerStateChange,
@@ -1112,15 +1109,6 @@
   }
 
   function handleTrackEnded() {
-    if (inExternalMix) {
-      // Inside YouTube's own Mix playlist now — let it advance itself.
-      // A stray ENDED here (e.g. end of the whole Mix) just nudges it forward.
-      if (player && player.nextVideo) {
-        try { player.nextVideo(); } catch (e) {}
-      }
-      return;
-    }
-
     if (repeatMode === "one") {
       playIndex(currentIndex, true);
       return;
@@ -1138,31 +1126,9 @@
       return;
     }
 
-    // reached end of our queue
-    if (autoRecommend) {
-      var lastTrack = playlist[currentIndex];
-      currentIndex = playlist.length; // out of range => "handed off to YouTube"
-      inExternalMix = true;
-      saveIndex();
-      updateNowPlayingText(true);
-      renderQueue();
-
-      if (player && lastTrack) {
-        try {
-          // 'RD' + videoId loads YouTube's algorithmic Mix built from that video.
-          // YouTube almost always puts the seed video itself as item 0 in the Mix,
-          // so start at index 1 to avoid an immediate repeat of the track that just ended.
-          player.loadPlaylist({ list: "RD" + lastTrack.id, index: 1 });
-          applyQualityPreference();
-        } catch (e) {
-          // Fallback: at least keep playing something related instead of just sitting on ENDED.
-          try { player.loadVideoById(lastTrack.id); } catch (e2) {}
-        }
-      }
-    } else {
-      isPlaying = false;
-      updatePlayIcon();
-    }
+    // reached end of our queue — just stop
+    isPlaying = false;
+    updatePlayIcon();
   }
 
   // Returns the playlist index that should play next, or null if the queue is exhausted.
@@ -1191,8 +1157,6 @@
   function playIndex(index, autoplay) {
     if (index < 0 || index >= playlist.length) return;
     if (autoplay === undefined) autoplay = true;
-
-    inExternalMix = false;
 
     if (shuffleOn) {
       var pos = shuffleOrder.indexOf(index);
@@ -1227,9 +1191,8 @@
     }
     els.videoWrap.innerHTML = "";
     els.videoWrap.classList.add("empty");
-    els.videoWrap.innerHTML = '<p>Добавь первую ссылку — плеер запустится прямо здесь. Когда очередь закончится, я передам эстафету рекомендациям ютуба, как ты и просила.</p>';
+    els.videoWrap.innerHTML = '<p>Добавь первую ссылку — плеер запустится прямо здесь.</p>';
     isPlaying = false;
-    inExternalMix = false;
     updatePlayIcon();
     updateNowPlayingText();
   }
@@ -1247,12 +1210,6 @@
   }
 
   function goNext() {
-    if (inExternalMix) {
-      if (player && player.nextVideo) {
-        try { player.nextVideo(); } catch (e) {}
-      }
-      return;
-    }
     if (playlist.length === 0) return;
     if (currentIndex === -1) {
       playIndex(shuffleOn ? shuffleOrder[0] : 0);
@@ -1263,12 +1220,6 @@
   }
 
   function goPrev() {
-    if (inExternalMix) {
-      if (player && player.previousVideo) {
-        try { player.previousVideo(); } catch (e) {}
-      }
-      return;
-    }
     if (playlist.length === 0) return;
     if (currentIndex === -1) {
       playIndex(shuffleOn ? shuffleOrder[0] : 0);
@@ -1284,23 +1235,15 @@
     els.playBtn.classList.toggle("is-playing", isPlaying);
   }
 
-  function updateNowPlayingText(handedOff) {
-    if (handedOff) {
-      els.npTitle.textContent = "Дальше — что предложит YouTube";
-      els.npSub.textContent = "Твоя очередь закончилась, эстафета передана рекомендациям";
-      updateAudioCover();
-      return;
-    }
+  function updateNowPlayingText() {
     if (currentIndex < 0 || !playlist[currentIndex]) {
       els.npTitle.textContent = "Ничего не играет";
       els.npSub.textContent = "Добавь ссылку, чтобы начать";
-      updateAudioCover();
       return;
     }
     var track = playlist[currentIndex];
     els.npTitle.textContent = track.title;
     els.npSub.textContent = "Трек " + (currentIndex + 1) + " из " + playlist.length;
-    updateAudioCover();
   }
 
   function renderQueue() {
@@ -1342,17 +1285,6 @@
     return div.innerHTML;
   }
 
-  // ---------- Mode toggle ----------
-  function setMode(auto) {
-    autoRecommend = auto;
-    saveMode();
-    els.modeQueueBtn.classList.toggle("active", !auto);
-    els.modeAutoBtn.classList.toggle("active", auto);
-    els.hintText.textContent = auto
-      ? "Режим «+ рекомендации»: как только твой список закончится, дальше пойдут рекомендации YouTube — как после обычного видео."
-      : "Режим «мой список»: плеер идёт строго по твоей очереди и останавливается в конце.";
-  }
-
   // ---------- Events ----------
   els.addBtn.addEventListener("click", addFromInput);
   els.urlInput.addEventListener("keydown", function (e) {
@@ -1364,11 +1296,6 @@
   els.prevBtn.addEventListener("click", goPrev);
   els.shuffleBtn.addEventListener("click", function () { setShuffle(!shuffleOn); });
   els.repeatBtn.addEventListener("click", cycleRepeat);
-  els.audioOnlyBtn.addEventListener("click", function () { setAudioOnly(!audioOnly); });
-  els.lowQualityBtn.addEventListener("click", function () { setLowQuality(!lowQuality); });
-
-  els.modeQueueBtn.addEventListener("click", function () { setMode(false); });
-  els.modeAutoBtn.addEventListener("click", function () { setMode(true); });
 
   els.clearBtn.addEventListener("click", function () {
     if (playlist.length === 0) return;
@@ -1382,6 +1309,8 @@
     if (file) importPlaylistFromFile(file);
     els.importFile.value = "";
   });
+
+  els.syncBtn.addEventListener("click", requestBookmarksSync);
 
   els.queueList.addEventListener("click", function (e) {
     var removeBtn = e.target.closest("[data-remove-index]");
@@ -1402,13 +1331,17 @@
   // ---------- Init ----------
   loadState();
   renderQueue();
-  setMode(autoRecommend);
   els.shuffleBtn.classList.toggle("active", shuffleOn);
   if (shuffleOn) buildShuffleOrder(true);
   setRepeat(repeatMode);
-  setLowQuality(lowQuality);
-  setAudioOnly(audioOnly);
   updateNowPlayingText();
+
+  setSyncStatus(null, "Проверяю расширение…");
+  setTimeout(function () {
+    if (!extensionDetected) {
+      setSyncStatus("missing", "Расширение не найдено");
+    }
+  }, 1500);
 
   if (playlist.length > 0 && currentIndex >= 0) {
     // will be picked up by onYouTubeIframeAPIReady via pendingLoadIndex logic

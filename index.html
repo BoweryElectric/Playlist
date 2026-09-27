@@ -74,6 +74,7 @@
     margin: 0;
     color: var(--md-on-surface);
   }
+  h1.wordmark span { color: var(--md-primary); }
 
   .queue-count {
     font-size: 14px;
@@ -233,6 +234,24 @@
   }
   .ctrl-btn.active:hover { background: var(--md-primary); filter: brightness(1.08); }
 
+  #repeatBtn { position: relative; }
+  .repeat-one-badge {
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: var(--md-on-primary);
+    color: var(--md-primary);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 13px;
+    text-align: center;
+    display: none;
+  }
+  #repeatBtn.repeat-one .repeat-one-badge { display: block; }
+
   .ctrl-play {
     width: 60px;
     height: 60px;
@@ -300,6 +319,27 @@
     margin: 0;
     color: var(--md-on-surface-variant);
   }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .icon-btn {
+    background: none;
+    border: none;
+    color: var(--md-outline);
+    width: 32px;
+    height: 32px;
+    border-radius: var(--shape-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+    flex-shrink: 0;
+  }
+  .icon-btn:hover { background: var(--md-surface-container-highest); color: var(--md-on-surface); }
+  .icon-btn svg { width: 16px; height: 16px; fill: currentColor; }
   .clear-btn {
     background: none;
     border: none;
@@ -408,7 +448,7 @@
 
 <div class="app">
   <header class="top">
-    <h1 class="wordmark">твой плейлист</h1>
+    <h1 class="wordmark"><span>Твой</span> плейлист</h1>
     <div class="queue-count" id="queueCount">0 треков в очереди</div>
   </header>
 
@@ -447,6 +487,10 @@
         <button class="ctrl-btn" id="nextBtn" title="Следующий">
           <svg viewBox="0 0 24 24"><path d="M16 18H18V6H16V18M6 18L14.5 12L6 6V18Z"/></svg>
         </button>
+        <button class="ctrl-btn" id="repeatBtn" title="Повтор: выключен">
+          <svg id="repeatIcon" viewBox="0 0 24 24"><path d="M7 7H17V10L21 6L17 2V5H5V11H7V7M17 17H7V14L3 18L7 22V19H19V13H17V17Z"/></svg>
+          <span class="repeat-one-badge">1</span>
+        </button>
 
         <div class="mode-toggle">
           <button class="chip active" id="modeQueueBtn" title="Играть только мой список">
@@ -466,7 +510,16 @@
     <aside class="queue-card">
       <div class="queue-header">
         <h2>Очередь</h2>
-        <button class="clear-btn" id="clearBtn">Очистить всё</button>
+        <div class="header-actions">
+          <button class="icon-btn" id="exportBtn" title="Скачать список (.json)">
+            <svg viewBox="0 0 24 24"><path d="M5 20H19V18H5V20M19 9H15V3H9V9H5L12 16L19 9Z"/></svg>
+          </button>
+          <button class="icon-btn" id="importBtn" title="Загрузить список из файла">
+            <svg viewBox="0 0 24 24"><path d="M9 16H15V10H19L12 3L5 10H9V16M5 18H19V20H5V18Z"/></svg>
+          </button>
+          <input type="file" id="importFile" accept="application/json" style="display:none;" />
+          <button class="clear-btn" id="clearBtn">Очистить всё</button>
+        </div>
       </div>
       <div class="queue-list" id="queueList">
         <div class="queue-empty">Список пуст.<br>Вставь ссылку выше — она появится тут.</div>
@@ -474,7 +527,7 @@
     </aside>
   </div>
 
-  <footer class="foot">Ссылки хранятся локально в этом браузере (localStorage).</footer>
+  <footer class="foot">Ссылки хранятся локально в этом браузере (localStorage) — сохрани резервную копию через «Скачать список», чтобы не потерять их при очистке данных сайта.</footer>
 </div>
 
 <script src="https://www.youtube.com/iframe_api"></script>
@@ -486,6 +539,7 @@
   var STORAGE_INDEX_KEY = "yt_playlist_material_index_v1";
   var STORAGE_MODE_KEY = "yt_playlist_material_mode_v1";
   var STORAGE_SHUFFLE_KEY = "yt_playlist_material_shuffle_v1";
+  var STORAGE_REPEAT_KEY = "yt_playlist_material_repeat_v1";
 
   /** @type {{id:string, title:string, thumb:string, addedAt:number}[]} */
   var playlist = [];
@@ -494,6 +548,7 @@
   var shuffleOn = false;
   var shuffleOrder = []; // array of playlist indices in shuffled play order
   var shufflePos = -1;   // position within shuffleOrder that is currently playing
+  var repeatMode = "off"; // "off" | "all" | "one"
   var player = null;
   var playerReady = false;
   var isPlaying = false;
@@ -511,12 +566,16 @@
     prevBtn: document.getElementById("prevBtn"),
     nextBtn: document.getElementById("nextBtn"),
     shuffleBtn: document.getElementById("shuffleBtn"),
+    repeatBtn: document.getElementById("repeatBtn"),
     modeQueueBtn: document.getElementById("modeQueueBtn"),
     modeAutoBtn: document.getElementById("modeAutoBtn"),
     hintText: document.getElementById("hintText"),
     queueList: document.getElementById("queueList"),
     queueCount: document.getElementById("queueCount"),
-    clearBtn: document.getElementById("clearBtn")
+    clearBtn: document.getElementById("clearBtn"),
+    exportBtn: document.getElementById("exportBtn"),
+    importBtn: document.getElementById("importBtn"),
+    importFile: document.getElementById("importFile")
   };
 
   var ICON_PLAY = '<path d="M8 5V19L19 12L8 5Z"/>';
@@ -542,6 +601,11 @@
     try {
       shuffleOn = localStorage.getItem(STORAGE_SHUFFLE_KEY) === "1";
     } catch (e) { shuffleOn = false; }
+
+    try {
+      var rep = localStorage.getItem(STORAGE_REPEAT_KEY);
+      repeatMode = (rep === "all" || rep === "one") ? rep : "off";
+    } catch (e) { repeatMode = "off"; }
   }
 
   function savePlaylist() {
@@ -555,6 +619,9 @@
   }
   function saveShuffle() {
     localStorage.setItem(STORAGE_SHUFFLE_KEY, shuffleOn ? "1" : "0");
+  }
+  function saveRepeat() {
+    localStorage.setItem(STORAGE_REPEAT_KEY, repeatMode);
   }
 
   // ---------- Shuffle ----------
@@ -590,6 +657,26 @@
       shuffleOrder = [];
       shufflePos = -1;
     }
+  }
+
+  // ---------- Repeat ----------
+  var REPEAT_TITLES = {
+    off: "Повтор: выключен",
+    all: "Повтор: вся очередь",
+    one: "Повтор: один трек"
+  };
+
+  function setRepeat(mode) {
+    repeatMode = mode;
+    saveRepeat();
+    els.repeatBtn.classList.toggle("active", mode !== "off");
+    els.repeatBtn.classList.toggle("repeat-one", mode === "one");
+    els.repeatBtn.title = REPEAT_TITLES[mode];
+  }
+
+  function cycleRepeat() {
+    var next = repeatMode === "off" ? "all" : (repeatMode === "all" ? "one" : "off");
+    setRepeat(next);
   }
 
   // ---------- YouTube URL parsing ----------
@@ -711,6 +798,81 @@
     renderQueue();
   }
 
+  // ---------- Export / Import ----------
+  function exportPlaylist() {
+    if (playlist.length === 0) {
+      showFeedback("Список пуст, нечего сохранять.");
+      return;
+    }
+    var payload = {
+      type: "yt-playlist-material-export",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      tracks: playlist.map(function (t) {
+        return { id: t.id, title: t.title, addedAt: t.addedAt };
+      })
+    };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    var stamp = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = "playlist-" + stamp + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function importPlaylistFromFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var data;
+      try {
+        data = JSON.parse(reader.result);
+      } catch (e) {
+        showFeedback("Не удалось прочитать файл — это точно тот .json, что скачивала эта страница?");
+        return;
+      }
+      if (!data || !Array.isArray(data.tracks)) {
+        showFeedback("Файл не похож на экспорт плейлиста.");
+        return;
+      }
+
+      var existingIds = {};
+      playlist.forEach(function (t) { existingIds[t.id] = true; });
+
+      var added = 0;
+      data.tracks.forEach(function (t) {
+        if (!t || typeof t.id !== "string" || !/^[a-zA-Z0-9_-]{11}$/.test(t.id)) return;
+        if (existingIds[t.id]) return;
+        playlist.push({
+          id: t.id,
+          title: typeof t.title === "string" && t.title ? t.title : t.id,
+          thumb: "https://i.ytimg.com/vi/" + t.id + "/mqdefault.jpg",
+          addedAt: typeof t.addedAt === "number" ? t.addedAt : Date.now()
+        });
+        existingIds[t.id] = true;
+        added++;
+      });
+
+      savePlaylist();
+      if (shuffleOn) buildShuffleOrder(currentIndex >= 0);
+      renderQueue();
+
+      if (added === 0) {
+        showFeedback("В файле не нашлось новых треков — все уже есть в очереди.");
+      } else {
+        showFeedback("Добавлено треков: " + added + ".");
+        if (currentIndex === -1) playIndex(playlist.length - added);
+      }
+    };
+    reader.onerror = function () {
+      showFeedback("Не удалось прочитать файл.");
+    };
+    reader.readAsText(file);
+  }
+
   // ---------- Player ----------
   window.onYouTubeIframeAPIReady = function () {
     playerReady = true;
@@ -815,11 +977,23 @@
   }
 
   function handleTrackEnded() {
+    if (repeatMode === "one") {
+      playIndex(currentIndex, true);
+      return;
+    }
+
     var next = peekNextIndex();
     if (next !== null) {
       playIndex(next, true);
       return;
     }
+
+    if (repeatMode === "all" && playlist.length > 0) {
+      var restart = shuffleOn ? shuffleOrder[0] : 0;
+      playIndex(restart, true);
+      return;
+    }
+
     // reached end of our queue
     if (autoRecommend) {
       // Hand control to YouTube's own related-video autoplay by loading the last
@@ -839,18 +1013,22 @@
   function peekNextIndex() {
     if (shuffleOn) {
       if (shufflePos < shuffleOrder.length - 1) return shuffleOrder[shufflePos + 1];
+      if (repeatMode === "all" && shuffleOrder.length > 0) return shuffleOrder[0];
       return null;
     }
     if (currentIndex >= 0 && currentIndex < playlist.length - 1) return currentIndex + 1;
+    if (repeatMode === "all" && playlist.length > 0) return 0;
     return null;
   }
 
   function peekPrevIndex() {
     if (shuffleOn) {
       if (shufflePos > 0) return shuffleOrder[shufflePos - 1];
+      if (repeatMode === "all" && shuffleOrder.length > 0) return shuffleOrder[shuffleOrder.length - 1];
       return null;
     }
     if (currentIndex > 0) return currentIndex - 1;
+    if (repeatMode === "all" && playlist.length > 0) return playlist.length - 1;
     return null;
   }
 
@@ -1011,6 +1189,7 @@
   els.nextBtn.addEventListener("click", goNext);
   els.prevBtn.addEventListener("click", goPrev);
   els.shuffleBtn.addEventListener("click", function () { setShuffle(!shuffleOn); });
+  els.repeatBtn.addEventListener("click", cycleRepeat);
 
   els.modeQueueBtn.addEventListener("click", function () { setMode(false); });
   els.modeAutoBtn.addEventListener("click", function () { setMode(true); });
@@ -1018,6 +1197,14 @@
   els.clearBtn.addEventListener("click", function () {
     if (playlist.length === 0) return;
     if (confirm("Удалить все треки из очереди?")) clearAll();
+  });
+
+  els.exportBtn.addEventListener("click", exportPlaylist);
+  els.importBtn.addEventListener("click", function () { els.importFile.click(); });
+  els.importFile.addEventListener("change", function (e) {
+    var file = e.target.files && e.target.files[0];
+    if (file) importPlaylistFromFile(file);
+    els.importFile.value = "";
   });
 
   els.queueList.addEventListener("click", function (e) {
@@ -1042,6 +1229,7 @@
   setMode(autoRecommend);
   els.shuffleBtn.classList.toggle("active", shuffleOn);
   if (shuffleOn) buildShuffleOrder(true);
+  setRepeat(repeatMode);
   updateNowPlayingText();
 
   if (playlist.length > 0 && currentIndex >= 0) {

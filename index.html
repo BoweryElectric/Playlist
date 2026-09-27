@@ -1018,16 +1018,7 @@
     }
   }
 
-  // On a fast/cached reload (F5), the YouTube API script can finish loading
-  // and fire its one-shot ready signal before this inline script has even
-  // run — window.onYouTubeIframeAPIReady wouldn't exist yet, so the call is
-  // lost for good and the player never builds. Guard against that: if the
-  // API is already sitting on window by the time we get here, init right away.
-  if (window.YT && window.YT.Player) {
-    initYouTubePlayer();
-  } else {
-    window.onYouTubeIframeAPIReady = initYouTubePlayer;
-  }
+  window.onYouTubeIframeAPIReady = initYouTubePlayer;
 
   function ensureVideoElement() {
     if (document.getElementById("ytPlayerFrame")) return;
@@ -1107,6 +1098,15 @@
   function showEmbedBlockedFallback(track) {
     isPlaying = false;
     updatePlayIcon();
+    // We're about to wipe out #ytPlayerFrame below, which leaves `player`
+    // pointing at a detached iframe. Destroy it and clear the reference so
+    // the next buildPlayerFor() call creates a fresh YT.Player instead of
+    // silently commanding a dead one (which is why switching tracks after
+    // hitting an embed-blocked video used to just go black with no error).
+    if (player) {
+      try { player.destroy(); } catch (e) {}
+      player = null;
+    }
     if (!track) return;
     var watchUrl = "https://www.youtube.com/watch?v=" + track.id;
     els.videoWrap.classList.add("empty");
@@ -1341,6 +1341,16 @@
 
   // ---------- Init ----------
   loadState();
+
+  // On a fast/cached reload (F5), the YouTube API script can finish loading
+  // and fire its one-shot ready signal before this inline script even reaches
+  // this point — window.onYouTubeIframeAPIReady wouldn't get registered in
+  // time and the signal is lost for good. Guard against that here, i.e. AFTER
+  // loadState(), so playlist/currentIndex are already populated when we do it.
+  if (window.YT && window.YT.Player) {
+    initYouTubePlayer();
+  }
+
   renderQueue();
   els.shuffleBtn.classList.toggle("active", shuffleOn);
   if (shuffleOn) buildShuffleOrder(true);

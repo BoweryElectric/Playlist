@@ -982,6 +982,17 @@
     var data = event.data;
     if (!data || data.source !== "eko-playlist-extension") return;
 
+    if (data.type === "GET_STATE") {
+      publishState(data.requestId);
+      return;
+    }
+
+    if (data.type === "COMMAND") {
+      runCommand(data.cmd, data.value);
+      publishState(data.requestId);
+      return;
+    }
+
     if (data.type === "EXTENSION_PRESENT") {
       extensionDetected = true;
       els.syncBtn.disabled = syncInProgress;
@@ -1004,6 +1015,97 @@
   });
 
 
+
+  // ---------- Mini-player bridge (extension toolbar popup) ----------
+  // The popup never plays anything itself: it reads this state and sends
+  // commands, this tab stays the only place where video is rendered.
+  var STORAGE_VOLUME_KEY = "yt_playlist_material_volume_v1";
+  var volume = 100; // 0..100, remembered between visits
+  var publishTimer = null;
+
+  try {
+    var savedVol = parseInt(localStorage.getItem(STORAGE_VOLUME_KEY), 10);
+    if (!isNaN(savedVol) && savedVol >= 0 && savedVol <= 100) volume = savedVol;
+  } catch (e) {}
+
+  function playerHas(method) {
+    return !!player && typeof player[method] === "function";
+  }
+
+  function applyVolume() {
+    if (!playerHas("setVolume")) return;
+    try { player.setVolume(volume); } catch (e) {}
+  }
+
+  function setVolumeLevel(v) {
+    v = Math.max(0, Math.min(100, Math.round(Number(v))));
+    if (isNaN(v)) return;
+    volume = v;
+    try { localStorage.setItem(STORAGE_VOLUME_KEY, String(volume)); } catch (e) {}
+    applyVolume();
+    // dragging the slider up from "muted" means the user wants sound
+    if (v > 0 && playerHas("isMuted") && player.isMuted()) player.unMute();
+  }
+
+  function toggleMute() {
+    if (!playerHas("isMuted")) return;
+    if (player.isMuted()) {
+      player.unMute();
+      if (volume === 0) setVolumeLevel(50);
+    } else {
+      player.mute();
+    }
+  }
+
+  function buildState() {
+    var track = currentIndex >= 0 ? playlist[currentIndex] : null;
+    var muted = false;
+    // Volume can also be changed in the YouTube frame itself, so ask the player.
+    if (playerHas("getVolume")) {
+      try {
+        var real = Math.round(player.getVolume());
+        if (!isNaN(real) && real !== volume) {
+          volume = real;
+          try { localStorage.setItem(STORAGE_VOLUME_KEY, String(volume)); } catch (e) {}
+        }
+        muted = !!player.isMuted();
+      } catch (e) {}
+    }
+    return {
+      hasTrack: !!track,
+      id: track ? track.id : "",
+      title: track ? track.title : "",
+      thumb: track ? track.thumb : "",
+      isPlaying: isPlaying,
+      index: currentIndex,
+      count: playlist.length,
+      volume: volume,
+      muted: muted
+    };
+  }
+
+  // With a requestId the extension is waiting for an answer, so reply now;
+  // otherwise it is a push, coalesced so bursts of UI updates send one message.
+  function publishState(requestId) {
+    if (requestId) {
+      window.postMessage({ source: "eko-playlist-page", type: "STATE", state: buildState(), requestId: requestId }, "*");
+      return;
+    }
+    if (publishTimer) return;
+    publishTimer = setTimeout(function () {
+      publishTimer = null;
+      window.postMessage({ source: "eko-playlist-page", type: "STATE", state: buildState() }, "*");
+    }, 60);
+  }
+
+  function runCommand(cmd, value) {
+    if (cmd === "toggle") togglePlayPause();
+    else if (cmd === "next") goNext();
+    else if (cmd === "prev") goPrev();
+    else if (cmd === "volume") setVolumeLevel(value);
+    else if (cmd === "mute") toggleMute();
+    publishState(); // pushes the settled state (volume/mute change no UI hook)
+  }
 
   // ---------- Player ----------
   function initYouTubePlayer() {
@@ -1049,6 +1151,7 @@
             var frame = player.getIframe();
             if (frame) frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
           } catch (e) {}
+          applyVolume();
           if (autoplay) player.playVideo();
         },
         onStateChange: onPlayerStateChange,
@@ -1242,11 +1345,13 @@
 
   // ---------- UI render ----------
   function updatePlayIcon() {
+    publishState();
     els.playIcon.innerHTML = isPlaying ? ICON_PAUSE : ICON_PLAY;
     els.playBtn.classList.toggle("is-playing", isPlaying);
   }
 
   function updateNowPlayingText() {
+    publishState();
     if (currentIndex < 0 || !playlist[currentIndex]) {
       els.npTitle.textContent = "Ничего не играет";
       els.npSub.textContent = "Добавь ссылку, чтобы начать";
@@ -1258,6 +1363,7 @@
   }
 
   function renderQueue() {
+    publishState();
     els.queueCount.textContent = playlist.length + " " + pluralTracks(playlist.length) + " в очереди";
 
     if (playlist.length === 0) {

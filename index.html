@@ -258,10 +258,9 @@
     height: 60px;
     background: var(--md-primary);
     color: var(--md-on-primary);
-    border-radius: var(--shape-l);
+    border-radius: var(--shape-full);
   }
   .ctrl-play:hover { background: var(--md-primary); filter: brightness(1.08); }
-  .ctrl-play.is-playing { border-radius: var(--shape-full); }
   .ctrl-play svg { width: 26px; height: 26px; }
 
   .bookmarks-sync {
@@ -1047,6 +1046,14 @@
     if (v > 0 && playerHas("isMuted") && player.isMuted()) player.unMute();
   }
 
+  function seekTo(sec) {
+    sec = Number(sec);
+    if (isNaN(sec) || !playerHas("seekTo")) return;
+    var max = playerHas("getDuration") ? Number(player.getDuration()) || 0 : 0;
+    if (max > 0) sec = Math.min(sec, max);
+    try { player.seekTo(Math.max(0, sec), true); } catch (e) {}
+  }
+
   function toggleMute() {
     if (!playerHas("isMuted")) return;
     if (player.isMuted()) {
@@ -1060,6 +1067,14 @@
   function buildState() {
     var track = currentIndex >= 0 ? playlist[currentIndex] : null;
     var muted = false;
+    var time = 0;
+    var duration = 0;
+    if (playerHas("getCurrentTime") && playerHas("getDuration")) {
+      try {
+        time = Math.round((Number(player.getCurrentTime()) || 0) * 10) / 10;
+        duration = Math.round((Number(player.getDuration()) || 0) * 10) / 10;
+      } catch (e) {}
+    }
     // Volume can also be changed in the YouTube frame itself, so ask the player.
     if (playerHas("getVolume")) {
       try {
@@ -1077,6 +1092,8 @@
       title: track ? track.title : "",
       thumb: track ? track.thumb : "",
       isPlaying: isPlaying,
+      time: time,
+      duration: duration,
       index: currentIndex,
       count: playlist.length,
       volume: volume,
@@ -1104,6 +1121,7 @@
     else if (cmd === "prev") goPrev();
     else if (cmd === "volume") setVolumeLevel(value);
     else if (cmd === "mute") toggleMute();
+    else if (cmd === "seek") seekTo(value);
     publishState(); // pushes the settled state (volume/mute change no UI hook)
   }
 
@@ -1300,8 +1318,13 @@
   }
 
   function stopAndClearPlayer() {
-    if (player && player.stopVideo) {
+    // The iframe is removed below, so the YT.Player object must go with it.
+    // Keeping it would make the next buildPlayerFor() load a video into a
+    // detached iframe (black player until the page is reloaded).
+    if (player) {
       try { player.stopVideo(); } catch (e) {}
+      try { player.destroy(); } catch (e) {}
+      player = null;
     }
     els.videoWrap.innerHTML = "";
     els.videoWrap.classList.add("empty");
@@ -1347,7 +1370,6 @@
   function updatePlayIcon() {
     publishState();
     els.playIcon.innerHTML = isPlaying ? ICON_PAUSE : ICON_PLAY;
-    els.playBtn.classList.toggle("is-playing", isPlaying);
   }
 
   function updateNowPlayingText() {

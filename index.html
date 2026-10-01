@@ -583,6 +583,9 @@
   var playerReady = false;
   var isPlaying = false;
   var pendingLoadIndex = null; // if user picks a video before player is ready
+  var queuedLoad = null;       // track requested while the YT.Player iframe is still booting
+  var syncTimer = null;
+  var LOADING_TITLE = "Загружаю название…";
 
   var els = {
     urlInput: document.getElementById("urlInput"),
@@ -616,7 +619,8 @@
   function loadState() {
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
-      playlist = raw ? JSON.parse(raw) : [];
+      var parsed = raw ? JSON.parse(raw) : [];
+      playlist = Array.isArray(parsed) ? parsed.filter(isValidTrack).map(normalizeTrack) : [];
     } catch (e) { playlist = []; }
 
     try {
@@ -635,17 +639,25 @@
     } catch (e) { repeatMode = "off"; }
   }
 
-  function savePlaylist() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(playlist));
+  // localStorage can throw (quota, storage blocked); the player must keep working.
+  function safeSet(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) {}
   }
-  function saveIndex() {
-    localStorage.setItem(STORAGE_INDEX_KEY, String(currentIndex));
+  function savePlaylist() { safeSet(STORAGE_KEY, JSON.stringify(playlist)); }
+  function saveIndex() { safeSet(STORAGE_INDEX_KEY, String(currentIndex)); }
+  function saveShuffle() { safeSet(STORAGE_SHUFFLE_KEY, shuffleOn ? "1" : "0"); }
+  function saveRepeat() { safeSet(STORAGE_REPEAT_KEY, repeatMode); }
+
+  function isValidTrack(t) {
+    return !!t && typeof t.id === "string" && /^[a-zA-Z0-9_-]{11}$/.test(t.id);
   }
-  function saveShuffle() {
-    localStorage.setItem(STORAGE_SHUFFLE_KEY, shuffleOn ? "1" : "0");
-  }
-  function saveRepeat() {
-    localStorage.setItem(STORAGE_REPEAT_KEY, repeatMode);
+  function normalizeTrack(t) {
+    return {
+      id: t.id,
+      title: typeof t.title === "string" && t.title ? t.title : t.id,
+      thumb: "https://i.ytimg.com/vi/" + t.id + "/mqdefault.jpg",
+      addedAt: typeof t.addedAt === "number" ? t.addedAt : Date.now()
+    };
   }
 
   // ---------- Shuffle ----------
@@ -705,29 +717,74 @@
 
   // ---------- YouTube URL parsing ----------
   function extractVideoId(url) {
-    url = url.trim();
+    url = String(url || "").trim();
+    var ID = /^[a-zA-Z0-9_-]{11}$/;
+    if (ID.test(url)) return url; // bare 11-char id
+
+    // Proper URL parsing first: "v" is not always the first query parameter
+    // (watch?list=...&v=ID, watch?feature=share&v=ID).
+    var u = null;
+    try { u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url : "https://" + url); } catch (e) {}
+    if (u) {
+      var host = u.hostname.toLowerCase().replace(/^(www|m|music)\./, "");
+      if (host === "youtube.com" || host === "youtube-nocookie.com") {
+        var v = u.searchParams.get("v");
+        if (v && ID.test(v)) return v;
+        var m = u.pathname.match(/^\/(?:embed|shorts|live|v)\/([a-zA-Z0-9_-]{11})/);
+        if (m) return m[1];
+      } else if (host === "youtu.be") {
+        var seg = u.pathname.split("/")[1] || "";
+        if (ID.test(seg)) return seg;
+      }
+    }
+
+    // Fallback for odd strings that aren't URLs but contain a link
     var patterns = [
       /(?:youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,
       /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
       /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
-      /(?:youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
-      /(?:music\.youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/
+      /(?:youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/
     ];
     for (var i = 0; i < patterns.length; i++) {
-      var m = url.match(patterns[i]);
-      if (m) return m[1];
+      var mm = url.match(patterns[i]);
+      if (mm) return mm[1];
     }
-    // bare 11-char id
-    if (/^[a-zA-Z0-9_-]{11}$/.test(url)) return url;
     return null;
   }
 
-  function fetchTitle(videoId) {
+  // oEmbed is queried at most a few at a time: a big bookmark folder used to fire
+  // dozens of requests at once, and every failure replaced a good bookmark title
+  // with the raw video id. Failure now resolves to null and callers keep what they have.
+  var TITLE_MAX_PARALLEL = 4;
+  var titleQueue = [];
+  var titleActive = 0;
+
+  function requestTitle(videoId) {
     // oEmbed doesn't require API key, works client-side (subject to CORS - YouTube allows it)
     return fetch("https://www.youtube.com/oembed?url=" + encodeURIComponent("https://www.youtube.com/watch?v=" + videoId) + "&format=json")
       .then(function (r) { if (!r.ok) throw new Error("oembed failed"); return r.json(); })
-      .then(function (data) { return data.title || videoId; })
-      .catch(function () { return videoId; });
+      .then(function (data) { return (data && data.title) || null; })
+      .catch(function () { return null; });
+  }
+
+  function pumpTitleQueue() {
+    while (titleActive < TITLE_MAX_PARALLEL && titleQueue.length) {
+      (function (job) {
+        titleActive++;
+        requestTitle(job.id).then(function (title) {
+          titleActive--;
+          job.resolve(title);
+          pumpTitleQueue();
+        });
+      })(titleQueue.shift());
+    }
+  }
+
+  function fetchTitle(videoId) {
+    return new Promise(function (resolve) {
+      titleQueue.push({ id: videoId, resolve: resolve });
+      pumpTitleQueue();
+    });
   }
 
   // ---------- Add / remove ----------
@@ -756,7 +813,7 @@
 
     var placeholderTrack = {
       id: id,
-      title: "Загружаю название…",
+      title: LOADING_TITLE,
       thumb: "https://i.ytimg.com/vi/" + id + "/mqdefault.jpg",
       addedAt: Date.now()
     };
@@ -772,7 +829,8 @@
     fetchTitle(id).then(function (title) {
       var track = playlist.find(function (t) { return t.id === id; });
       if (track) {
-        track.title = title;
+        if (title) track.title = title;
+        else if (track.title === LOADING_TITLE) track.title = id;
         savePlaylist();
         renderQueue();
         if (currentIndex >= 0 && playlist[currentIndex] && playlist[currentIndex].id === id) {
@@ -938,7 +996,7 @@
     candidates.forEach(function (c) {
       var placeholderTrack = {
         id: c.id,
-        title: c.bookmarkTitle || "Загружаю название…",
+        title: c.bookmarkTitle || LOADING_TITLE,
         thumb: "https://i.ytimg.com/vi/" + c.id + "/mqdefault.jpg",
         addedAt: Date.now()
       };
@@ -948,7 +1006,8 @@
       fetchTitle(c.id).then(function (title) {
         var track = playlist.find(function (t) { return t.id === c.id; });
         if (track) {
-          track.title = title;
+          if (title) track.title = title;
+          else if (track.title === LOADING_TITLE) track.title = c.id;
           savePlaylist();
           renderQueue();
           if (currentIndex >= 0 && playlist[currentIndex] && playlist[currentIndex].id === c.id) {
@@ -974,6 +1033,13 @@
     if (!extensionDetected || syncInProgress) return;
     setSyncingUI(true);
     window.postMessage({ source: "eko-playlist-page", type: "REQUEST_SYNC" }, "*");
+    // If the extension was reloaded/disabled while this tab was open, nobody answers.
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(function () {
+      if (!syncInProgress) return;
+      setSyncingUI(false);
+      showFeedback("Расширение не ответило. Если его перезагружали — обнови страницу (F5).");
+    }, 8000);
   }
 
   window.addEventListener("message", function (event) {
@@ -987,7 +1053,9 @@
     }
 
     if (data.type === "COMMAND") {
-      runCommand(data.cmd, data.value);
+      // Whatever happens, answer: an unanswered request makes the extension
+      // think this tab is gone and the popup shows "player not open".
+      try { runCommand(data.cmd, data.value); } catch (e) { console.error("[mini-player] command failed:", e); }
       publishState(data.requestId);
       return;
     }
@@ -1000,6 +1068,7 @@
     }
 
     if (data.type === "SYNC_RESULT") {
+      clearTimeout(syncTimer);
       if (!data.ok) {
         setSyncingUI(false);
         if (data.error === "folder-not-found") {
@@ -1149,10 +1218,17 @@
   function buildPlayerFor(videoId, autoplay) {
     ensureVideoElement();
     if (player) {
-      player.loadVideoById(videoId);
-      if (!autoplay) { player.cueVideoById(videoId); }
+      if (!playerHas("loadVideoById")) {
+        // The iframe is still booting and has no API methods yet: remember the
+        // request, onReady applies it.
+        queuedLoad = { id: videoId, autoplay: autoplay };
+        return;
+      }
+      if (autoplay) player.loadVideoById(videoId);
+      else player.cueVideoById(videoId);
       return;
     }
+    queuedLoad = null;
     player = new YT.Player("ytPlayerFrame", {
       videoId: videoId,
       host: "https://www.youtube-nocookie.com",
@@ -1164,13 +1240,24 @@
         enablejsapi: 1
       },
       events: {
-        onReady: function () {
+        onReady: function (ev) {
+          // Use the player that fired, not the global: it may have been cleared
+          // or replaced while the iframe was booting.
+          var p = (ev && ev.target) || player;
+          if (!p || p !== player) return;
           try {
-            var frame = player.getIframe();
+            var frame = p.getIframe();
             if (frame) frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
           } catch (e) {}
           applyVolume();
-          if (autoplay) player.playVideo();
+          if (queuedLoad) {
+            var q = queuedLoad;
+            queuedLoad = null;
+            if (q.autoplay) p.loadVideoById(q.id);
+            else p.cueVideoById(q.id);
+          } else if (autoplay) {
+            p.playVideo();
+          }
         },
         onStateChange: onPlayerStateChange,
         onError: onPlayerError
@@ -1228,6 +1315,7 @@
       try { player.destroy(); } catch (e) {}
       player = null;
     }
+    queuedLoad = null;
     if (!track) return;
     var watchUrl = "https://www.youtube.com/watch?v=" + track.id;
     els.videoWrap.classList.add("empty");
@@ -1326,6 +1414,7 @@
       try { player.destroy(); } catch (e) {}
       player = null;
     }
+    queuedLoad = null;
     els.videoWrap.innerHTML = "";
     els.videoWrap.classList.add("empty");
     els.videoWrap.innerHTML = '<p>Добавь первую ссылку — плеер запустится прямо здесь.</p>';
@@ -1337,6 +1426,12 @@
   function togglePlayPause() {
     if (!player) {
       if (playlist.length > 0) playIndex(currentIndex >= 0 ? currentIndex : 0);
+      return;
+    }
+    if (!playerHas("playVideo")) {
+      // Player iframe is still booting: start as soon as it is ready.
+      var cur = playlist[currentIndex >= 0 ? currentIndex : 0];
+      if (cur) queuedLoad = { id: cur.id, autoplay: true };
       return;
     }
     if (isPlaying) {
